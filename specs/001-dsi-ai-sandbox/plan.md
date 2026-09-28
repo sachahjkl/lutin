@@ -78,6 +78,13 @@ Only keys held in the menu are blocked when returning to play, until each key is
 Short taps remain visible for one update. Multiple same-key taps during a stall coalesce.
 This does not preempt TLS, filesystem calls, or other long native operations.
 
+DNS lookup runs in one worker with private input and result storage.
+The interface polls for completion and supplies the resolved address to libcurl.
+Cancellation and the DNS deadline detach the request from the pending lookup.
+The worker finishes normally before another lookup starts; it is never killed inside the system resolver.
+The DS worker uses a 16 KiB stack and the BlocksDS cooperative scheduler.
+Host builds use a POSIX thread for the same lookup code.
+
 ## Checks
 
 `flake.nix` exposes ROM, installation kit, runtime, workspace, agent, network, protocol, SSE, chat, config, input, hooks, and emulator checks.
@@ -85,6 +92,9 @@ Host behavior tests use sanitizers where applicable.
 The emulator uses DS-mode BIOS replacements and requires no private files.
 The input test deliberately stalls the consumer while sending a short button press.
 Authenticated host inference is a separate manual check using a temporary credential file.
+The network emulator check runs the production interface, network state machine, and resolver worker with injected Wi-Fi and DNS functions.
+It stalls DNS for 30 seconds and checks cancellation, menu input, late-result isolation, and retry after failure.
+It does not validate real Wi-Fi packets, TLS negotiation, or inference on a physical DSi.
 
 ## Remaining validation and capabilities
 

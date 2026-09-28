@@ -10,6 +10,7 @@ nix develop --command prek run --all-files
 nix flake check "path:$PWD" --no-write-lock-file
 nix build .#rom -o result-rom
 nix build .#emulator-check -o result-emulator
+nix build .#checks.x86_64-linux.network-emulator -o result-network-emulator
 ```
 
 The flake pins the build inputs. Its default shell installs `prek` hooks.
@@ -23,7 +24,7 @@ Backlog tools were unavailable during this work. No `BACKLOG.json` was edited.
 | `workspace` | Partial writes, close errors, rename failures, rollback, stale backups, blocked temporary paths, and project selection. |
 | `agent`     | Tools, versions, sessions, Queue, Steer, cancellation, interrupted results, non-replay, and model persistence.          |
 | `protocol`  | Responses and Chat Completions, fragmented arguments, reasoning, multiple calls, and output limits.                     |
-| `network`   | DSi Wi-Fi flags, bounded association retries, idle reconnect, and cancellation.                                         |
+| `network`   | Wi-Fi retries, idle reconnect, DNS worker cancellation, timeout, failure, successful resolution, and request reuse.     |
 | `sse`       | Split fragments, CRLF, multiline events, and size limits.                                                               |
 | `chat`      | Bounded pagination, scrolling, recent-message tracking, and control-character filtering.                                |
 | `config`    | Defaults, model names, valid preferences, unknown keys, duplicate keys, invalid types, and oversized files.             |
@@ -56,6 +57,22 @@ The input probe samples through the same VBlank handler as the application.
 It deliberately avoids consuming input for 120 VBlanks.
 The automation presses and releases A during this interval, then checks that the press survives exactly one read.
 This validates capture during a stalled consumer, not a universal response-time guarantee.
+
+`scripts/check-network-emulator.sh` runs the production interface, network state machine, and resolver worker in a fault-injection ROM.
+Linker wrappers report Wi-Fi association and stall the first DNS lookup for 30 seconds.
+The test requires cancellation and menu input before the DNS function returns.
+It checks that a second request cannot reuse a pending worker or consume its late result.
+After the worker returns, it checks that a new request reaches the injected DNS failure.
+The check stores screenshots, OCR output, and DNS entry/exit markers.
+This covers scheduling and cancellation, not real packets, TLS, or authenticated inference.
+
+Earlier emulator checks did not exercise a stalled DNS lookup.
+The host libcurl build also differed from the console build, which disables the threaded resolver.
+The resolver worker now keeps this blocking call outside the interface loop on both platforms.
+
+A control run with the v0.5.2 network implementation fails the cancellation assertion during the injected DNS stall.
+It leaves **WiFi:ON** and **Connecting to Wi-Fi...** on screen after B is pressed.
+The patched host harness also downloaded the published catalog over verified HTTPS without an API key.
 
 ## Authenticated host inference, 2026-09-28
 
@@ -90,6 +107,8 @@ These results use host networking, not emulated DSi networking.
 The user confirmed DSi-mode startup, then Wi-Fi association after enabling `WIFI_ATTEMPT_DSI_MODE`.
 Correcting the console clock resolved a certificate-validity failure.
 The user subsequently confirmed that the agent worked on their DSi XL.
+Later feedback reported a receive abort during inference and an unresponsive catalog update.
+The DNS-worker change still requires a physical-console retest; it does not establish the cause of the receive abort.
 
 The latest input-buffer changes still require physical-console feedback.
 Full DSi emulation, maximum combined Lua/TLS memory, native-operation latency, and power-loss behavior remain unmeasured.

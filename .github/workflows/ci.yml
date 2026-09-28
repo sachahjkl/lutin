@@ -31,6 +31,7 @@ jobs:
           nix build .#rom -o result-rom
           nix build .#release-kit -o result-release
           nix build .#emulator-check -o result-emulator
+          nix build .#checks.x86_64-linux.network-emulator -o result-network-emulator
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: lutin-build
@@ -38,6 +39,7 @@ jobs:
             result-rom/lutin.nds
             result-release/
             result-emulator/
+            result-network-emulator/
           if-no-files-found: error
 
   release:

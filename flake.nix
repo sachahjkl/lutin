@@ -65,7 +65,7 @@
     };
     rom = pkgs.blocksdsNix.stdenvBlocksdsSlim.mkDerivation {
       pname = "lutin";
-      version = "0.5.2";
+      version = "0.5.3";
       src = source;
       nativeBuildInputs = [pkgs.gnumake];
       LUA_SOURCE = luaSource;
@@ -144,8 +144,8 @@
         cc -std=c11 -D_POSIX_C_SOURCE=200809L -DCJSON_NESTING_LIMIT=64 -Wall -Wextra -Werror \
           -I${luaSource}/src -I${jsonSource}/embedded -I${./source} -I${./tests/support} \
           ${./tests/live-agent.c} ${./source/agent.c} ${./source/tools.c} ${./source/workspace.c} \
-          ${./source/backend.c} ${./source/config.c} ${./source/runtime.c} ${./source/network.c} ${./source/sse.c} ${./source/protocol.c} \
-          ${luaSource}/src/*.c ${jsonSource}/embedded/cJSON.c -lcurl -lm -o "$out/bin/live-agent"
+          ${./source/backend.c} ${./source/config.c} ${./source/runtime.c} ${./source/network.c} ${./source/resolver.c} ${./source/sse.c} ${./source/protocol.c} \
+          ${luaSource}/src/*.c ${jsonSource}/embedded/cJSON.c -pthread -lcurl -lm -o "$out/bin/live-agent"
       '';
     workspaceCheck =
       pkgs.runCommand "lutin-workspace-check" {
@@ -180,10 +180,10 @@
         nativeBuildInputs = [pkgs.stdenv.cc];
         buildInputs = [pkgs.curl];
       } ''
-        cc -std=c11 -DTEST_WIFI_CONTROL -Wall -Wextra -Werror -fsanitize=address,undefined \
+        cc -std=c11 -D_POSIX_C_SOURCE=200809L -DTEST_WIFI_CONTROL -Wall -Wextra -Werror -fsanitize=address,undefined \
           -I${./source} -I${./tests/support} -I${jsonSource}/embedded \
-          ${./tests/network.c} ${./source/backend.c} ${./source/network.c} ${./source/protocol.c} ${./source/sse.c} \
-          ${jsonSource}/embedded/cJSON.c -Wl,--wrap=time -lcurl -o test-network
+          ${./tests/network.c} ${./source/backend.c} ${./source/network.c} ${./source/resolver.c} ${./source/protocol.c} ${./source/sse.c} \
+          ${jsonSource}/embedded/cJSON.c -Wl,--wrap=time,--wrap=getaddrinfo -pthread -lcurl -o test-network
         cp ${./tests/catalog.json} models.json
         timeout 10 ./test-network
         touch "$out"
@@ -210,6 +210,22 @@
         FONTCONFIG_FILE = pkgs.makeFontsConf {fontDirectories = [pkgs.dejavu_fonts];};
       } ''
         bash ${./scripts/check-emulator.sh} ${rom}/lutin.nds "$out" ${./tests/melonds.toml} ${schedulerRom}/scheduler.nds ${./examples} ${./catalog/models.json}
+      '';
+    networkStallRom = rom.overrideAttrs (_: {
+      pname = "lutin-network-stall";
+      src = pkgs.lib.fileset.toSource {
+        root = ./.;
+        fileset = pkgs.lib.fileset.unions [./Makefile ./source ./tests/network-stall.c];
+      };
+      postPatch = "cp tests/network-stall.c source/network-stall.c";
+      LDFLAGS = "-Wl,--wrap=Wifi_InitDefault,--wrap=Wifi_AutoConnect,--wrap=Wifi_AssocStatus,--wrap=getaddrinfo";
+    });
+    networkEmulatorCheck =
+      pkgs.runCommand "lutin-network-emulator-check" {
+        nativeBuildInputs = emulatorTools;
+        FONTCONFIG_FILE = pkgs.makeFontsConf {fontDirectories = [pkgs.dejavu_fonts];};
+      } ''
+        bash ${./scripts/check-network-emulator.sh} ${networkStallRom}/lutin.nds "$out" ${./tests/melonds.toml} ${./tests/catalog.json}
       '';
     presentationCheck =
       pkgs.runCommand "lutin-presentation-check" {
@@ -262,6 +278,7 @@
       release-kit = releaseKit;
       sd-format-linux = sdFormatLinux;
       emulator-check = emulatorCheck;
+      network-stall-rom = networkStallRom;
       live-agent = liveAgent;
       presentation-rom = presentationRom;
       presentation = presentationCheck;
@@ -318,6 +335,7 @@
       release-kit = releaseKit;
       sd-format-linux = sdFormatLinux;
       emulator = emulatorCheck;
+      network-emulator = networkEmulatorCheck;
       pre-commit = preCommitCheck;
       runtime = runtimeCheck;
       agent = agentCheck;

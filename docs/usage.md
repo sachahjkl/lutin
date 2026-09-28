@@ -134,10 +134,15 @@ Association retries at most three times, with five-second delays.
 Idle reconnection attempts run every thirty seconds after a lost connection.
 Reconnection does not replay an interrupted AI request.
 
-The status shows DNS, TCP, TLS, Waiting, or Stream with elapsed time and bytes received.
-The HTTPS connection timeout is sixty seconds.
-A request stops after 180 seconds without data or 600 seconds total.
-START → Stop agent cancels the request when control returns to the main loop.
+The status shows DNS, TCP, TLS, Waiting, or Stream with elapsed time.
+Transfer stages also show bytes received.
+DNS lookup and HTTPS connection setup each have a sixty-second timeout.
+The HTTPS transfer stops after 180 seconds without data or 600 seconds total.
+During DNS lookup, use **START → Stop agent** to cancel inference or **B** to cancel a catalog update.
+The interface remains active while DNS waits.
+A cancelled lookup finishes in its worker before another lookup starts.
+If a new request reports **DNS worker unavailable**, wait for that lookup to finish before retrying.
+TLS computation and filesystem operations can still delay interface input.
 
 ## Creation API
 

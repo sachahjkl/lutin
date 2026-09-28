@@ -1,5 +1,6 @@
 #include "network.h"
 #include "backend.h"
+#include "resolver.h"
 #include "response_error.h"
 #include "sse.h"
 #include <cJSON.h>
@@ -13,6 +14,10 @@
 static CURL *request;
 static CURLM *multi;
 static struct curl_slist *headers;
+static struct curl_slist *resolved_hosts;
+static bool resolving;
+enum { NETWORK_CONNECT_SECONDS = 60, NETWORK_PORT_BYTES = 6 };
+static char request_host[RESOLVER_HOST_BYTES], request_port[NETWORK_PORT_BYTES];
 static bool initialized;
 static bool connecting;
 typedef enum {
@@ -133,6 +138,7 @@ static size_t receive(char *data, size_t size, size_t count, void *context) {
 
 void network_stop(void) {
     connecting = false;
+    resolving = false;
     phase = NETWORK_IDLE;
     if (multi && request)
         curl_multi_remove_handle(multi, request);
@@ -141,6 +147,8 @@ void network_stop(void) {
     if (multi)
         curl_multi_cleanup(multi);
     curl_slist_free_all(headers);
+    curl_slist_free_all(resolved_hosts);
+    resolved_hosts = NULL;
     free(body_copy);
     body_copy = NULL;
     free(catalog_data);
@@ -172,9 +180,11 @@ static bool begin_connection(void) {
     wifi_deadline = started + 30;
     connecting = true;
     phase = NETWORK_WIFI;
-    if (Wifi_AssocStatus() != ASSOCSTATUS_ASSOCIATED)
+    if (Wifi_AssocStatus() != ASSOCSTATUS_ASSOCIATED) {
         Wifi_AutoConnect();
-    snprintf(status, sizeof(status), "Connecting to Wi-Fi...");
+        snprintf(status, sizeof(status), "Connecting to Wi-Fi...");
+    } else
+        snprintf(status, sizeof(status), "Wi-Fi connected; preparing HTTPS");
     return true;
 }
 
@@ -296,6 +306,8 @@ void network_tick(void) {
             return;
         }
         curl_easy_setopt(request, CURLOPT_URL, request_url);
+        /* All hostname lookup runs in the resolver worker, including on DS. */
+        curl_easy_setopt(request, CURLOPT_PROXY, "");
         curl_error[0] = 0;
         curl_easy_setopt(request, CURLOPT_ERRORBUFFER, curl_error);
         curl_easy_setopt(request, CURLOPT_HTTPHEADER, headers);
@@ -308,12 +320,42 @@ void network_tick(void) {
         curl_easy_setopt(request, CURLOPT_SSL_VERIFYHOST, 2L);
         curl_easy_setopt(request, CURLOPT_WRITEFUNCTION, receive);
         curl_easy_setopt(request, CURLOPT_USERAGENT, "Lutin/0.5");
-        curl_easy_setopt(request, CURLOPT_CONNECTTIMEOUT, 60L);
+        curl_easy_setopt(request, CURLOPT_CONNECTTIMEOUT,
+                         (long)NETWORK_CONNECT_SECONDS);
         curl_easy_setopt(request, CURLOPT_TIMEOUT, 600L);
         curl_easy_setopt(request, CURLOPT_NOSIGNAL, 1L);
-        curl_multi_add_handle(multi, request);
         started = last_data = now;
         phase = NETWORK_DNS;
+        CURLU *url = curl_url();
+        char *host = NULL, *port = NULL;
+        bool valid =
+            url &&
+            curl_url_set(url, CURLUPART_URL, request_url, 0) == CURLUE_OK &&
+            curl_url_get(url, CURLUPART_HOST, &host, 0) == CURLUE_OK &&
+            curl_url_get(url, CURLUPART_PORT, &port, CURLU_DEFAULT_PORT) ==
+                CURLUE_OK &&
+            strlen(host) < sizeof(request_host) &&
+            strlen(port) < sizeof(request_port);
+        if (valid) {
+            snprintf(request_host, sizeof(request_host), "%s", host);
+            snprintf(request_port, sizeof(request_port), "%s", port);
+        }
+        curl_free(host);
+        curl_free(port);
+        curl_url_cleanup(url);
+        bool ready = valid && resolver_poll(NULL);
+        if (!ready || !resolver_start(request_host)) {
+            snprintf(status, sizeof(status), "%s",
+                     !valid ? "Invalid request URL"
+                     : !ready
+                         ? "DNS worker unavailable; retry after lookup finishes"
+                         : "Cannot start DNS worker");
+            network_stop();
+            return;
+        }
+        resolving = true;
+        snprintf(status, sizeof(status), "DNS lookup: %.200s", request_host);
+        return;
     }
     if (!multi)
         return;
@@ -321,6 +363,48 @@ void network_tick(void) {
         snprintf(status, sizeof(status), "Wi-Fi lost; request stopped");
         network_stop();
         idle_retry = now;
+        return;
+    }
+    if (resolving) {
+        ResolverResult result;
+        if (now - started >= NETWORK_CONNECT_SECONDS) {
+            snprintf(status, sizeof(status), "DNS timeout after %ds",
+                     NETWORK_CONNECT_SECONDS);
+            network_stop();
+            return;
+        }
+        if (!resolver_poll(&result)) {
+            snprintf(status, sizeof(status), "DNS %lds: %.200s",
+                     (long)(now - started), request_host);
+            return;
+        }
+        if (result.error) {
+            snprintf(status, sizeof(status), "DNS lookup failed (%d): %.200s",
+                     result.error, request_host);
+            network_stop();
+            return;
+        }
+        /* Host, port, address, two separators and optional IPv6 brackets. */
+        char entry[RESOLVER_HOST_BYTES + NETWORK_PORT_BYTES +
+                   RESOLVER_ADDRESS_BYTES + sizeof("::[]")];
+        bool ipv6 = strchr(result.address, ':') != NULL;
+        snprintf(entry, sizeof(entry), "%s:%s:%s%s%s", request_host,
+                 request_port, ipv6 ? "[" : "", result.address,
+                 ipv6 ? "]" : "");
+        resolved_hosts = curl_slist_append(NULL, entry);
+        if (!resolved_hosts ||
+            curl_easy_setopt(request, CURLOPT_RESOLVE, resolved_hosts) !=
+                CURLE_OK ||
+            curl_multi_add_handle(multi, request) != CURLM_OK) {
+            snprintf(status, sizeof(status),
+                     "Cannot prepare resolved connection");
+            network_stop();
+            return;
+        }
+        resolving = false;
+        phase = NETWORK_CONNECT;
+        snprintf(status, sizeof(status), "Connecting to server: %.200s",
+                 request_host);
         return;
     }
     if (now - last_data >= 180) {
@@ -335,15 +419,13 @@ void network_tick(void) {
         network_stop();
         return;
     }
-    double resolved = 0, connected = 0, secured = 0;
-    curl_easy_getinfo(request, CURLINFO_NAMELOOKUP_TIME, &resolved);
+    double connected = 0, secured = 0;
     curl_easy_getinfo(request, CURLINFO_CONNECT_TIME, &connected);
     curl_easy_getinfo(request, CURLINFO_APPCONNECT_TIME, &secured);
     phase = received        ? NETWORK_STREAM
             : secured > 0   ? NETWORK_WAIT
             : connected > 0 ? NETWORK_TLS
-            : resolved > 0  ? NETWORK_CONNECT
-                            : NETWORK_DNS;
+                            : NETWORK_CONNECT;
     const char *label = phase == NETWORK_STREAM    ? "Stream"
                         : phase == NETWORK_WAIT    ? "Waiting"
                         : phase == NETWORK_TLS     ? "TLS"

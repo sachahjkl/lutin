@@ -36,7 +36,7 @@ typedef struct {
     unsigned instructions;
     unsigned pixels;
     unsigned asset_bytes;
-    Voice voices[4];
+    Voice voices[RUNTIME_AUDIO_VOICES];
 } Runtime;
 
 static Runtime active;
@@ -78,8 +78,9 @@ unsigned runtime_logs(unsigned cursor, char *output, size_t capacity) {
 void runtime_set_font(const unsigned char *value) { font = value; }
 
 static void pixel(int x, int y, uint16_t value) {
-    if (input.pixels && x >= 0 && y >= 0 && x < 256 && y < 192)
-        input.pixels[y * 256 + x] = value;
+    if (input.pixels && x >= 0 && y >= 0 && x < RUNTIME_SCREEN_WIDTH &&
+        y < RUNTIME_SCREEN_HEIGHT)
+        input.pixels[y * RUNTIME_SCREEN_WIDTH + x] = value;
 }
 
 bool runtime_capture(const char *path) {
@@ -88,11 +89,12 @@ bool runtime_capture(const char *path) {
     FILE *file = fopen(path, "wb");
     if (!file)
         return false;
-    bool ok = fprintf(file, "P6\n256 192\n255\n") > 0;
-    for (int y = 0; y < 192 && ok; y++) {
-        unsigned char row[256 * 3];
-        for (int x = 0; x < 256; x++) {
-            unsigned value = input.pixels[y * 256 + x];
+    bool ok = fprintf(file, "P6\n%d %d\n255\n", RUNTIME_SCREEN_WIDTH,
+                      RUNTIME_SCREEN_HEIGHT) > 0;
+    for (int y = 0; y < RUNTIME_SCREEN_HEIGHT && ok; y++) {
+        unsigned char row[RUNTIME_SCREEN_WIDTH * 3];
+        for (int x = 0; x < RUNTIME_SCREEN_WIDTH; x++) {
+            unsigned value = input.pixels[y * RUNTIME_SCREEN_WIDTH + x];
             for (int c = 0; c < 3; c++)
                 row[x * 3 + c] = ((value >> (c * 5)) & 31) * 255 / 31;
         }
@@ -142,9 +144,9 @@ static void charge_pixels(lua_State *state, unsigned count) {
 
 static int clear(lua_State *state) {
     uint16_t value = color(state, 1);
-    charge_pixels(state, 256 * 192);
+    charge_pixels(state, RUNTIME_SCREEN_WIDTH * RUNTIME_SCREEN_HEIGHT);
     if (input.pixels)
-        for (int i = 0; i < 256 * 192; i++)
+        for (int i = 0; i < RUNTIME_SCREEN_WIDTH * RUNTIME_SCREEN_HEIGHT; i++)
             input.pixels[i] = value;
     return 0;
 }
@@ -165,16 +167,16 @@ static int rectangle(lua_State *state) {
         x = 0;
     if (y < 0)
         y = 0;
-    if (right > 256)
-        right = 256;
-    if (bottom > 192)
-        bottom = 192;
+    if (right > RUNTIME_SCREEN_WIDTH)
+        right = RUNTIME_SCREEN_WIDTH;
+    if (bottom > RUNTIME_SCREEN_HEIGHT)
+        bottom = RUNTIME_SCREEN_HEIGHT;
     if (right > x && bottom > y)
         charge_pixels(state, (unsigned)((right - x) * (bottom - y)));
     if (input.pixels)
         for (int row = y; row < bottom; row++)
             for (int column = x; column < right; column++)
-                input.pixels[row * 256 + column] = value;
+                input.pixels[row * RUNTIME_SCREEN_WIDTH + column] = value;
     return 0;
 }
 
@@ -250,14 +252,14 @@ static int load_asset(lua_State *state) {
         return luaL_error(state, "Load assets at startup or in init");
     if (!asset_reader)
         return luaL_error(state, "Asset storage unavailable");
-    if (runtime->asset_bytes >= 65536)
+    if (runtime->asset_bytes >= RUNTIME_ASSET_READ_BYTES)
         return luaL_error(state, "Asset read budget exceeded");
-    char *text = asset_reader(path, 32768);
+    char *text = asset_reader(path, RUNTIME_ASSET_FILE_BYTES);
     if (!text)
         return luaL_error(state, "Cannot read asset: %s", path);
     size_t length = strlen(text);
     runtime->asset_bytes += (unsigned)length + 1;
-    if (runtime->asset_bytes > 65536) {
+    if (runtime->asset_bytes > RUNTIME_ASSET_READ_BYTES) {
         free(text);
         return luaL_error(state, "Asset read budget exceeded");
     }
@@ -273,18 +275,18 @@ static int sprite(lua_State *state) {
     luaL_checktype(state, 1, LUA_TTABLE);
     luaL_checktype(state, 2, LUA_TTABLE);
     unsigned height = (unsigned)lua_rawlen(state, 1);
-    luaL_argcheck(state, height >= 1 && height <= 64, 1,
+    luaL_argcheck(state, height >= 1 && height <= RUNTIME_SPRITE_MAX_SIZE, 1,
                   "Sprite height must be 1..64");
     lua_rawgeti(state, 1, 1);
     size_t width;
     luaL_checklstring(state, -1, &width);
-    luaL_argcheck(state, width >= 1 && width <= 64, 1,
+    luaL_argcheck(state, width >= 1 && width <= RUNTIME_SPRITE_MAX_SIZE, 1,
                   "Sprite width must be 1..64");
     lua_pop(state, 1);
     unsigned colors = (unsigned)lua_rawlen(state, 2);
-    luaL_argcheck(state, colors >= 1 && colors <= 16, 2,
+    luaL_argcheck(state, colors >= 1 && colors <= RUNTIME_PALETTE_COLORS, 2,
                   "Palette must contain 1..16 colors");
-    uint16_t palette[16];
+    uint16_t palette[RUNTIME_PALETTE_COLORS];
     for (unsigned i = 0; i < colors; i++) {
         lua_rawgeti(state, 2, i + 1);
         palette[i] = color(state, -1);
@@ -320,7 +322,8 @@ static int draw_sprite(lua_State *state) {
     Sprite *image = luaL_checkudata(state, 1, "lutin.sprite");
     int x = coordinate(state, 2), y = coordinate(state, 3);
     lua_Integer scale = luaL_optinteger(state, 4, 1);
-    luaL_argcheck(state, scale >= 1 && scale <= 8, 4, "Scale must be 1..8");
+    luaL_argcheck(state, scale >= 1 && scale <= RUNTIME_SPRITE_MAX_SCALE, 4,
+                  "Scale must be 1..8");
     bool flip = lua_toboolean(state, 5);
     charge_pixels(state,
                   image->width * image->height * (unsigned)(scale * scale));
@@ -355,7 +358,7 @@ static int sound(lua_State *state) {
                   "Use square or noise");
     luaL_checktype(state, 2, LUA_TTABLE);
     size_t count = lua_rawlen(state, 2);
-    luaL_argcheck(state, count >= 1 && count <= 128, 2,
+    luaL_argcheck(state, count >= 1 && count <= RUNTIME_SOUND_MAX_NOTES, 2,
                   "Sound must contain 1..128 notes");
     charge_pixels(state, (unsigned)count);
     Sound *data =
@@ -366,11 +369,15 @@ static int sound(lua_State *state) {
     for (unsigned i = 0; i < count; i++) {
         lua_rawgeti(state, 2, i + 1);
         luaL_checktype(state, -1, LUA_TTABLE);
-        data->notes[i].frequency = note_value(state, 1, 0, 16000);
-        if (data->notes[i].frequency && data->notes[i].frequency < 32)
+        data->notes[i].frequency =
+            note_value(state, 1, 0, RUNTIME_SOUND_MAX_FREQUENCY);
+        if (data->notes[i].frequency &&
+            data->notes[i].frequency < RUNTIME_SOUND_MIN_FREQUENCY)
             return luaL_error(state, "Frequency must be zero or 32..16000 Hz");
-        data->notes[i].frames = note_value(state, 2, 1, 3600);
-        data->notes[i].volume = note_value(state, 3, 0, 127);
+        data->notes[i].frames =
+            note_value(state, 2, 1, RUNTIME_SOUND_MAX_FRAMES);
+        data->notes[i].volume =
+            note_value(state, 3, 0, RUNTIME_AUDIO_MAX_VOLUME);
         lua_pop(state, 1);
     }
     return 1;
@@ -385,9 +392,11 @@ static void stop_voice(lua_State *state, Voice *voice) {
 
 static int play_sound(lua_State *state) {
     Sound *data = luaL_checkudata(state, 1, "lutin.sound");
-    lua_Integer number = luaL_optinteger(state, 2, data->noise ? 4 : 1);
-    luaL_argcheck(state, number >= 1 && number <= 4, 2, "Voice must be 1..4");
-    luaL_argcheck(state, data->noise == (number == 4), 2,
+    lua_Integer number =
+        luaL_optinteger(state, 2, data->noise ? RUNTIME_NOISE_VOICE + 1 : 1);
+    luaL_argcheck(state, number >= 1 && number <= RUNTIME_AUDIO_VOICES, 2,
+                  "Voice must be 1..4");
+    luaL_argcheck(state, data->noise == (number == RUNTIME_NOISE_VOICE + 1), 2,
                   "Noise uses voice 4; square uses voices 1..3");
     Voice *voice = &context(state)->voices[number - 1];
     bool loop = lua_toboolean(state, 3);
@@ -402,13 +411,14 @@ static int play_sound(lua_State *state) {
 
 static int stop_sound(lua_State *state) {
     lua_Integer number = luaL_checkinteger(state, 1);
-    luaL_argcheck(state, number >= 1 && number <= 4, 1, "Voice must be 1..4");
+    luaL_argcheck(state, number >= 1 && number <= RUNTIME_AUDIO_VOICES, 1,
+                  "Voice must be 1..4");
     stop_voice(state, &context(state)->voices[number - 1]);
     return 0;
 }
 
 static void audio_frame(void) {
-    for (unsigned i = 0; i < 4; i++) {
+    for (unsigned i = 0; i < RUNTIME_AUDIO_VOICES; i++) {
         Voice *voice = &active.voices[i];
         if (voice->remaining) {
             voice->remaining--;
@@ -445,7 +455,7 @@ static int invoke(lua_State *state) {
     if (lua_isnil(state, -1))
         return 0;
     if (delta)
-        lua_pushnumber(state, 1.0 / 60.0);
+        lua_pushnumber(state, 1.0 / RUNTIME_FRAMES_PER_SECOND);
     lua_call(state, delta ? 1 : 0, 0);
     return 0;
 }
@@ -512,6 +522,28 @@ static int initialize(lua_State *state) {
         lua_setglobal(state, removed[i]);
     }
     luaL_newlib(state, functions);
+    const struct {
+        const char *name;
+        unsigned value;
+    } buttons[] = {{"A", BUTTON_A},         {"B", BUTTON_B},
+                   {"X", BUTTON_X},         {"Y", BUTTON_Y},
+                   {"LEFT", BUTTON_LEFT},   {"RIGHT", BUTTON_RIGHT},
+                   {"UP", BUTTON_UP},       {"DOWN", BUTTON_DOWN},
+                   {"L", BUTTON_L},         {"R", BUTTON_R},
+                   {"START", BUTTON_START}, {"SELECT", BUTTON_SELECT},
+                   {"TOUCH", BUTTON_TOUCH}};
+    for (unsigned i = 0; i < sizeof(buttons) / sizeof(*buttons); i++) {
+        lua_pushinteger(state, buttons[i].value);
+        lua_setfield(state, -2, buttons[i].name);
+    }
+    lua_pushinteger(state, RUNTIME_SCREEN_WIDTH);
+    lua_setfield(state, -2, "WIDTH");
+    lua_pushinteger(state, RUNTIME_SCREEN_HEIGHT);
+    lua_setfield(state, -2, "HEIGHT");
+    lua_pushinteger(state, RUNTIME_FRAMES_PER_SECOND);
+    lua_setfield(state, -2, "FPS");
+    lua_pushinteger(state, RUNTIME_NOISE_VOICE + 1);
+    lua_setfield(state, -2, "NOISE_VOICE");
     lua_setglobal(state, "ds");
     return 0;
 }
@@ -555,7 +587,7 @@ bool runtime_start(const char *code) {
 void runtime_stop(void) {
     if (active.state) {
         if (audio_output)
-            for (unsigned i = 0; i < 4; i++)
+            for (unsigned i = 0; i < RUNTIME_AUDIO_VOICES; i++)
                 audio_output(i, 0, 0);
         lua_close(active.state);
         log_message("Program stopped");

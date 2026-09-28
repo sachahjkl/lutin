@@ -159,18 +159,19 @@ A program defines optional `init()`, `update(dt)`, and `draw()` functions.
 | `ds.stop_sound(voice)`                      | Stop one voice.                                                |
 
 The framebuffer is 256 × 192 pixels. Colors use `0xRRGGBB`.
+Use `ds.WIDTH`, `ds.HEIGHT`, and `ds.FPS` for screen dimensions and the runtime frame rate.
 Coordinates must be integers between −4,096 and 4,096. Drawing clips at screen edges.
-Button masks include A = 1, B = 2, Right = 16, Left = 32, Up = 64, and Down = 128.
+Use named button masks: `ds.A`, `ds.B`, `ds.X`, `ds.Y`, `ds.LEFT`, `ds.RIGHT`, `ds.UP`, `ds.DOWN`, `ds.L`, and `ds.R`.
 
 ```lua
 local x = 100
 
 function update(dt)
   local held = ds.buttons()
-  if held & 16 ~= 0 then
+  if held & ds.RIGHT ~= 0 then
     x = math.min(240, x + 80 * dt)
   end
-  if held & 32 ~= 0 then
+  if held & ds.LEFT ~= 0 then
     x = math.max(0, x - 80 * dt)
   end
 end

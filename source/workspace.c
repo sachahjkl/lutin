@@ -125,13 +125,14 @@ bool workspace_create(unsigned *project) {
         snprintf(error, sizeof(error), "SD card unavailable");
         return false;
     }
-    unsigned items[12], count, last = 0;
+    unsigned items[WORKSPACE_PROJECT_PAGE_SIZE], count, last = 0;
     do {
-        if (!workspace_projects(last, items, 12, &count))
+        if (!workspace_projects(last, items, WORKSPACE_PROJECT_PAGE_SIZE,
+                                &count))
             return false;
         if (count)
             last = items[count - 1];
-    } while (count == 12);
+    } while (count == WORKSPACE_PROJECT_PAGE_SIZE);
     if (last == UINT_MAX) {
         snprintf(error, sizeof(error), "Project identifiers exhausted");
         return false;

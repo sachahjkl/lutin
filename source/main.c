@@ -18,8 +18,8 @@ static const char demo[] =
     "x,y,vx,vy=120,80,80,60\n"
     "function update(dt)\n"
     " local held=ds.buttons()\n"
-    " if held & 32 ~= 0 then x=x-100*dt end\n"
-    " if held & 16 ~= 0 then x=x+100*dt end\n"
+    " if held & ds.LEFT ~= 0 then x=x-100*dt end\n"
+    " if held & ds.RIGHT ~= 0 then x=x+100*dt end\n"
     " x=x+vx*dt;y=y+vy*dt\n"
     " if x<0 then x=0;vx=math.abs(vx) end\n"
     " if x>244 then x=244;vx=-math.abs(vx) end\n"
@@ -64,7 +64,8 @@ static bool modal, steer;
 static bool tools_expanded;
 static unsigned model_index;
 static unsigned session_items[12], session_count, session_index, session_after;
-static unsigned project_items[12], project_count, project_index, project_after;
+static unsigned project_items[WORKSPACE_PROJECT_PAGE_SIZE], project_count,
+    project_index, project_after;
 static unsigned menu_index, project = 1, session_number = 1;
 static unsigned chat_scroll, source_scroll, queue_index;
 static int editing_queue = -1;
@@ -100,7 +101,8 @@ static void session_changed(void) {
 }
 
 static void refresh_projects(void) {
-    if (!workspace_projects(project_after, project_items, 12, &project_count))
+    if (!workspace_projects(project_after, project_items,
+                            WORKSPACE_PROJECT_PAGE_SIZE, &project_count))
         snprintf(message, sizeof(message), "%s", workspace_error());
     project_index = 0;
 }

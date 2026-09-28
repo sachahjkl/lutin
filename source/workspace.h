@@ -2,6 +2,7 @@
 #define AI_WORKSPACE_H
 #include <stdbool.h>
 #include <stddef.h>
+enum { WORKSPACE_PROJECT_PAGE_SIZE = 12 };
 void workspace_init(bool available, const char *base);
 bool workspace_select(unsigned project);
 bool workspace_projects(unsigned after, unsigned *items, unsigned capacity,

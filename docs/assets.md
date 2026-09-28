@@ -69,14 +69,14 @@ Each note contains `{frequencyHz, durationFrames, volume}`:
 local jump = ds.load_asset("jump.lua")
 function update(dt)
   local held, pressed = ds.buttons()
-  if pressed & 1 ~= 0 then
+  if pressed & ds.A ~= 0 then
     ds.play_sound(jump, 2)
   end
 end
 ```
 
 Square waves use voices 1–3. Voice 1 is the default.
-Noise uses voice 4. Create noise sequences with `ds.sound("noise", notes)`.
+Noise uses `ds.NOISE_VOICE`. Create noise sequences with `ds.sound("noise", notes)`.
 The runtime uses libnds PSG and noise playback.
 Use `ds.play_sound(music, 1, true)` for a looping melody.
 Use another voice for effects during music playback.

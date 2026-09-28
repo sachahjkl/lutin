@@ -82,10 +82,12 @@ The source-built kit uses these paths:
 | `result-installation/02-menu/roms/nds/lutin.nds` | `/roms/nds/lutin.nds`                                      |
 | `result-installation/02-menu/lutin/ca.pem`       | `/lutin/ca.pem`                                            |
 | `result-installation/02-menu/lutin/config.json`  | `/lutin/config.json`                                       |
+| `result-installation/02-menu/lutin/models.json`  | `/lutin/models.json`                                       |
 | `result-installation/02-menu/lutin/projects/1/`  | `/lutin/projects/1/` — optional starter program and assets |
 
 Do not overwrite an existing project with the starter animation.
 For an update, replace the ROM. Update the CA bundle when needed.
+When upgrading from `v0.4.0`, also install `models.json` for the new SD catalog.
 
 ### 3. Set up OpenCode Go
 
@@ -130,6 +132,7 @@ Edit `/lutin/config.json`, then restart Lutin:
 All keys are optional. A session's saved model takes priority over the default.
 Unknown, repeated, or invalid keys reject the whole configuration and display a diagnostic.
 Model IDs use `provider/model` in configuration and saved sessions.
+The [SD model catalog](docs/model-catalog.md) supports manual entries, reloading, and updates from the START command menu.
 Each provider reads its own credential file from `/lutin/keys/<provider-id>`.
 The bundled provider is `opencode-go`, with the four models listed above.
 

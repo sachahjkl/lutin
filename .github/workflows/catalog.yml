@@ -1,0 +1,36 @@
+name: Update model catalog
+
+on:
+  schedule:
+    - cron: "20 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: model-catalog
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: DeterminateSystems/nix-installer-action@3138316df39ed29be04236d7ffc686fa525866aa
+      - name: Build catalog from models.dev
+        run: |
+          curl --fail --location --max-time 120 --max-filesize 10485760 --user-agent 'Lutin catalog builder' https://models.dev/api.json -o "$RUNNER_TEMP/models-dev.json"
+          nix develop --command python3 scripts/build-catalog.py "$RUNNER_TEMP/models-dev.json" catalog/routes.json catalog/models.json
+          nix develop --command prek run --files catalog/models.json
+          nix build .#checks.x86_64-linux.catalog --no-link
+      - name: Publish changed catalog
+        run: |
+          if ! git diff --quiet -- catalog/models.json; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add catalog/models.json
+            git commit -m 'Update model catalog from models.dev'
+            git push origin HEAD:main
+          fi

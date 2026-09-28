@@ -17,6 +17,8 @@ void network_set_backend(unsigned index, const char *session_id) {
 }
 const char *network_wifi(void) { return "REPLAY"; }
 const char *network_status(void) { return status; }
+bool network_update_catalog(void) { return false; }
+bool network_catalog_updated(void) { return false; }
 bool network_busy(void) { return busy; }
 bool network_output_limited(void) { return false; }
 void network_stop(void) { busy = false; }

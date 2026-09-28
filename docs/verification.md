@@ -128,6 +128,15 @@ The `media` check loads the bundled Lua assets through the real workspace reader
 It renders animation and checks music/effect events through a host audio callback.
 Physical-console sprite controls and audible output remain unverified.
 
+## SD model catalog
+
+The `catalog` check validates provider/model parsing, personal entries, defaults, duplicate rejection, failed replacement, and FAT backup recovery.
+The generator test checks route selection and rejects models without text/tool support.
+Agent tests remove a selected model and verify that its queued request remains pending.
+Network tests verify that a catalog update starts without a provider key and can be cancelled.
+The emulator loads the SD catalog and invokes **Reload model catalog** through the command menu.
+Physical-console catalog download remains unverified.
+
 ## Published release
 
 Release `v0.3.0` passed GitHub CI and published the ROM, SD ZIP, and `SHA256SUMS`.

@@ -27,6 +27,7 @@ in
     cp ${rom}/lutin.nds "$out/02-menu/roms/nds/lutin.nds"
     mkdir -p "$out/02-menu/lutin/keys"
     cp ${../examples/config.json} "$out/02-menu/lutin/config.json"
+    cp ${../catalog/models.json} "$out/02-menu/lutin/models.json"
     cp ${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt "$out/02-menu/lutin/ca.pem"
     mkdir -p "$out/02-menu/lutin/projects/1"
     cp ${../examples/media.lua} "$out/02-menu/lutin/projects/1/main.lua"

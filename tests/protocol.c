@@ -27,7 +27,8 @@ static void event(const char *data) {
 
 int main(void) {
     const char *request =
-        "{\"model\":\"deepseek-v4-flash\",\"instructions\":\"Code\",\"tools\":["
+        "{\"model\":\"deepseek-v4-flash\",\"reasoning\":{\"effort\":\"low\"},"
+        "\"instructions\":\"Code\",\"tools\":["
         "{\"type\":\"function\",\"name\":\"execute\",\"parameters\":{}}],"
         "\"input\":[{\"role\":\"user\",\"content\":\"build\"},{\"type\":"
         "\"reasoning\",\"summary\":[{\"text\":\"plan\"}]},{\"type\":\"function_"
@@ -49,6 +50,11 @@ int main(void) {
                        cJSON_GetArrayItem(messages, 2), "reasoning_content")
                        ->valuestring,
                    "plan"));
+    cJSON_Delete(body);
+    free(encoded);
+    encoded = protocol_request("{}", API_CHAT_COMPLETIONS);
+    body = cJSON_Parse(encoded);
+    assert(body && !cJSON_HasObjectItem(body, "reasoning_effort"));
     cJSON_Delete(body);
     free(encoded);
     cJSON *multiple = cJSON_Parse(request);

@@ -1,4 +1,5 @@
 #include "config.h"
+#include "backend.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -11,6 +12,7 @@ static void write_config(const char *text) {
 }
 
 int main(void) {
+    assert(catalog_load("."));
     assert(config_load("absent.json"));
     assert(config_get()->default_model == 0);
     write_config(

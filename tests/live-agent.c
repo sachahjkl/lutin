@@ -10,10 +10,30 @@
 #include <time.h>
 
 int main(int argc, char **argv) {
+    if (argc == 3 && !strcmp(argv[1], "--update-catalog")) {
+        network_set_directory(argv[2]);
+        if (!network_update_catalog()) {
+            fprintf(stderr, "%s\n", network_status());
+            return 1;
+        }
+        time_t started = time(NULL);
+        while (network_busy() && time(NULL) - started < 120) {
+            network_tick();
+            nanosleep(&(struct timespec){.tv_nsec = 100000000}, NULL);
+        }
+        printf("%s\n", network_status());
+        bool updated = network_catalog_updated();
+        network_stop();
+        return updated ? 0 : 1;
+    }
     if (argc != 4) {
         fprintf(stderr, "Usage: live-agent DIRECTORY PROVIDER/MODEL PROMPT\n");
         for (unsigned i = 0; i < BACKEND_COUNT; i++)
             fprintf(stderr, "%s: %s\n", backends[i].id, backends[i].label);
+        return 2;
+    }
+    if (!catalog_load(argv[1])) {
+        fprintf(stderr, "%s\n", catalog_error());
         return 2;
     }
     unsigned model = 0;

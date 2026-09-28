@@ -27,7 +27,7 @@ nix build .#live-agent -o result-live-agent
 result-live-agent/bin/live-agent /path/to/private-test-directory opencode-go/deepseek-v4-flash 'Create and run an animation.'
 ```
 
-Place `keys/opencode-go` and `ca.pem` in the private test directory first.
+Place `keys/opencode-go`, `ca.pem`, and `models.json` in the private test directory first.
 This test consumes your service allowance.
 Keep the directory outside the repository and Nix store.
 Check for a completed agent turn, a running creation, and no runtime error.

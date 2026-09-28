@@ -11,4 +11,6 @@ void network_stop(void);
 bool network_busy(void);
 bool network_output_limited(void);
 const char *network_status(void);
+bool network_update_catalog(void);
+bool network_catalog_updated(void);
 #endif

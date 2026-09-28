@@ -40,6 +40,15 @@ static char token_path[256];
 static char request_url[256];
 static char ca_path[256] = "/lutin/ca.pem";
 static char curl_error[CURL_ERROR_SIZE];
+static bool downloading_catalog, catalog_updated;
+static char *catalog_data;
+static size_t catalog_size;
+
+bool network_catalog_updated(void) {
+    bool updated = catalog_updated;
+    catalog_updated = false;
+    return updated;
+}
 
 static bool add_header(const char *value) {
     struct curl_slist *updated = curl_slist_append(headers, value);
@@ -56,6 +65,8 @@ void network_set_directory(const char *directory) {
 
 void network_set_backend(unsigned index, const char *session_id) {
     backend_index = index < BACKEND_COUNT ? index : 0;
+    if (!BACKEND_COUNT)
+        return;
     const Provider *provider = backends[backend_index].provider;
     session_header[0] = 0;
     if (provider->session_header)
@@ -98,6 +109,18 @@ static size_t receive(char *data, size_t size, size_t count, void *context) {
         error_body[used + copy] = 0;
         return length;
     }
+    if (downloading_catalog) {
+        if (length >= CATALOG_MAX_BYTES - catalog_size) {
+            snprintf(status, sizeof(status),
+                     "Catalog download exceeds byte limit");
+            local_error = true;
+            return 0;
+        }
+        memcpy(catalog_data + catalog_size, data, length);
+        catalog_size += length;
+        catalog_data[catalog_size] = 0;
+        return length;
+    }
     if (!sse_feed(&parser, data, length) || protocol_failed()) {
         snprintf(status, sizeof(status), "%s",
                  protocol_output_limited() ? "Model output limit reached"
@@ -120,14 +143,67 @@ void network_stop(void) {
     curl_slist_free_all(headers);
     free(body_copy);
     body_copy = NULL;
+    free(catalog_data);
+    catalog_data = NULL;
+    downloading_catalog = false;
     headers = NULL;
     request = NULL;
     multi = NULL;
     sse_init(&parser, NULL);
 }
 
-bool network_start(const char *body, NetworkEvent event) {
+static bool begin_connection(void) {
+    if (!initialized) {
+        initialized = Wifi_InitDefault(INIT_ONLY | WIFI_ATTEMPT_DSI_MODE);
+        if (initialized)
+            curl_global_init(CURL_GLOBAL_DEFAULT);
+    }
+    if (!initialized) {
+        snprintf(status, sizeof(status), "Network initialization failed");
+        network_stop();
+        return false;
+    }
+    error_body[0] = 0;
+    received = 0;
+    local_error = false;
+    started = last_data = time(NULL);
+    wifi_attempt = 1;
+    retry_at = 0;
+    wifi_deadline = started + 30;
+    connecting = true;
+    phase = NETWORK_WIFI;
+    if (Wifi_AssocStatus() != ASSOCSTATUS_ASSOCIATED)
+        Wifi_AutoConnect();
+    snprintf(status, sizeof(status), "Connecting to Wi-Fi...");
+    return true;
+}
+
+bool network_update_catalog(void) {
+    if (network_busy())
+        return false;
     network_stop();
+    catalog_updated = false;
+    catalog_data = malloc(CATALOG_MAX_BYTES);
+    if (!catalog_data) {
+        snprintf(status, sizeof(status), "Not enough memory for catalog");
+        return false;
+    }
+    catalog_size = 0;
+    downloading_catalog = true;
+    snprintf(request_url, sizeof(request_url), "%s",
+             "https://raw.githubusercontent.com/sachahjkl/lutin/main/catalog/"
+             "models.json");
+    return begin_connection();
+}
+
+bool network_start(const char *body, NetworkEvent event) {
+    if (downloading_catalog)
+        return false;
+    network_stop();
+    if (!BACKEND_COUNT || backend_index >= BACKEND_COUNT) {
+        snprintf(status, sizeof(status), "Load a valid model catalog first");
+        return false;
+    }
     const Backend *backend = &backends[backend_index];
     const Provider *provider = backend->provider;
     snprintf(token_path, sizeof(token_path), "%s/keys/%s", key_directory,
@@ -164,31 +240,14 @@ bool network_start(const char *body, NetworkEvent event) {
     if (session_header[0])
         headers_ok = headers_ok && add_header(session_header);
     body_copy = protocol_request(body, backend_protocol(backend_index));
-    if (!initialized) {
-        initialized = Wifi_InitDefault(INIT_ONLY | WIFI_ATTEMPT_DSI_MODE);
-        if (initialized)
-            curl_global_init(CURL_GLOBAL_DEFAULT);
-    }
-    if (!initialized || !body_copy || !headers_ok) {
+    if (!body_copy || !headers_ok) {
         snprintf(status, sizeof(status), "Network initialization failed");
         network_stop();
         return false;
     }
     protocol_start(backend_protocol(backend_index), event);
     sse_init(&parser, protocol_event);
-    error_body[0] = 0;
-    received = 0;
-    local_error = false;
-    started = last_data = time(NULL);
-    wifi_attempt = 1;
-    retry_at = 0;
-    wifi_deadline = started + 30;
-    connecting = true;
-    phase = NETWORK_WIFI;
-    if (Wifi_AssocStatus() != ASSOCSTATUS_ASSOCIATED)
-        Wifi_AutoConnect();
-    snprintf(status, sizeof(status), "Connecting to Wi-Fi...");
-    return true;
+    return begin_connection();
 }
 
 void network_tick(void) {
@@ -240,7 +299,10 @@ void network_tick(void) {
         curl_error[0] = 0;
         curl_easy_setopt(request, CURLOPT_ERRORBUFFER, curl_error);
         curl_easy_setopt(request, CURLOPT_HTTPHEADER, headers);
-        curl_easy_setopt(request, CURLOPT_POSTFIELDS, body_copy);
+        if (downloading_catalog)
+            curl_easy_setopt(request, CURLOPT_HTTPGET, 1L);
+        else
+            curl_easy_setopt(request, CURLOPT_POSTFIELDS, body_copy);
         curl_easy_setopt(request, CURLOPT_CAINFO, ca_path);
         curl_easy_setopt(request, CURLOPT_SSL_VERIFYPEER, 1L);
         curl_easy_setopt(request, CURLOPT_SSL_VERIFYHOST, 2L);
@@ -310,6 +372,15 @@ void network_tick(void) {
                                    : curl_easy_strerror(message->data.result));
         else if (http >= 400) {
             response_error(status, sizeof(status), http, error_body);
+        } else if (downloading_catalog) {
+            catalog_updated =
+                http == 200 &&
+                catalog_install(key_directory, catalog_data, catalog_size);
+            snprintf(status, sizeof(status), "%s",
+                     catalog_updated
+                         ? "Model catalog updated"
+                         : (http != 200 ? "Catalog download requires HTTP 200"
+                                        : catalog_error()));
         } else
             snprintf(status, sizeof(status), "HTTP %ld", http);
         network_stop();

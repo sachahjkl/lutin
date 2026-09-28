@@ -10,10 +10,14 @@ fi
 mkdir -p "$output"
 rom=$(nix build .#rom --no-link --print-out-paths)
 kit=$(nix build .#release-kit --no-link --print-out-paths)
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+cp -a "$kit/." "$work/"
+chmod -R u+rwX "$work"
 install -m 644 "$rom/lutin.nds" "$output/lutin-$version.nds"
 rm -f "$output/lutin-$version-sd.zip"
 (
-	cd "$kit"
+	cd "$work"
 	zip -q -r "$output/lutin-$version-sd.zip" .
 )
 (

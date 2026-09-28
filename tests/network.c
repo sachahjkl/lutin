@@ -1,10 +1,12 @@
 #include "network.h"
+#include "backend.h"
 #include <assert.h>
 #include <dswifi9.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <time.h>
+#include <unistd.h>
 
 static time_t now = 100;
 static unsigned attempts;
@@ -21,6 +23,7 @@ void Wifi_AutoConnect(void) { attempts++; }
 int Wifi_AssocStatus(void) { return ASSOCSTATUS_CANNOTCONNECT; }
 
 int main(void) {
+    assert(catalog_load("."));
     assert(mkdir("credentials", 0700) == 0);
     assert(mkdir("credentials/keys", 0700) == 0);
     network_set_directory("credentials");
@@ -52,6 +55,11 @@ int main(void) {
     assert(network_start("{}", NULL));
     network_stop();
     assert(!network_busy());
+    assert(unlink("credentials/keys/opencode-go") == 0);
+    assert(network_update_catalog() && network_busy());
+    assert(!network_start("{}", NULL) && network_busy());
+    network_stop();
+    assert(!network_busy() && !network_catalog_updated());
     puts("Network: separate Go key, DSi mode, bounded retries, idle reconnect "
          "and cancellation passed");
     return 0;

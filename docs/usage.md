@@ -257,7 +257,7 @@ nix build .#live-agent -o result-live-agent
 result-live-agent/bin/live-agent /path/to/private-test-directory opencode-go/deepseek-v4-flash 'Create and run an animation.'
 ```
 
-Place `keys/opencode-go` and `ca.pem` in that directory first.
+Place `keys/opencode-go`, `ca.pem`, and `models.json` in that directory first.
 The model argument uses the same provider-qualified ID as configuration and sessions.
 The harness uses the real agent, tools, runtime, and HTTPS modules with host networking.
 It writes project files and `result.ppm`. Success requires a completed turn with a running creation.

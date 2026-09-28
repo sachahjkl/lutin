@@ -80,6 +80,7 @@ static bool native(const char *name, const char *json, char *output,
 }
 
 int main(void) {
+    assert(catalog_load("."));
     workspace_init(true, "test-projects");
     runtime_set_asset_reader(workspace_read);
     assert(agent_open(1));
@@ -321,6 +322,30 @@ int main(void) {
     assert(saved_model && strstr(saved_model, "opencode-go/deepseek-v4-flash"));
     free(saved_model);
     assert(agent_open(7) && agent_model() == 3);
+    FILE *catalog_file = fopen("models.json", "rb");
+    assert(catalog_file);
+    char catalog_data[CATALOG_MAX_BYTES];
+    size_t catalog_length =
+        fread(catalog_data, 1, sizeof(catalog_data) - 1, catalog_file);
+    catalog_data[catalog_length] = 0;
+    assert(fclose(catalog_file) == 0);
+    cJSON *catalog_json = cJSON_Parse(catalog_data);
+    assert(catalog_json);
+    cJSON_DeleteItemFromArray(
+        cJSON_GetObjectItemCaseSensitive(catalog_json, "models"), 3);
+    char *reduced_catalog = cJSON_PrintUnformatted(catalog_json);
+    cJSON_Delete(catalog_json);
+    assert(reduced_catalog && chmod("models.json", 0600) == 0);
+    catalog_file = fopen("models.json", "wb");
+    assert(catalog_file && fputs(reduced_catalog, catalog_file) >= 0 &&
+           fclose(catalog_file) == 0);
+    free(reduced_catalog);
+    assert(catalog_load(".") && agent_model() == BACKEND_COUNT);
+    assert(agent_resume());
+    agent_tick();
+    assert(agent_queue_size() == 1 && !agent_busy());
+    assert(catalog_install(".", catalog_data, catalog_length) &&
+           agent_model() == 3);
     assert(mkdir(temporary, 0700) == 0);
     assert(!agent_select_model(0) && agent_model() == 3);
     assert(rmdir(temporary) == 0);

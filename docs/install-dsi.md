@@ -15,9 +15,10 @@ nix build .#installation-kit -o result-installation
 1. Copy `02-menu/roms/nds/lutin.nds` to `/roms/nds/lutin.nds` on the SD card.
 2. Copy `02-menu/lutin/ca.pem` to `/lutin/ca.pem`.
 3. Copy `02-menu/lutin/config.json` to `/lutin/config.json` for an initial installation.
-4. Save your OpenCode Go API key in `/lutin/keys/opencode-go` as plain text.
-5. Configure Wi-Fi and the correct date and time in the console system settings.
-6. Launch the ROM through TWiLight Menu++ in DSi mode.
+4. Copy `02-menu/lutin/models.json` to `/lutin/models.json`.
+5. Save your OpenCode Go API key in `/lutin/keys/opencode-go` as plain text.
+6. Configure Wi-Fi and the correct date and time in the console system settings.
+7. Launch the ROM through TWiLight Menu++ in DSi mode.
 
 For an offline example, copy all files from `02-menu/lutin/projects/1/` into the corresponding SD directory.
 Do not replace an existing creation with this example.

@@ -46,7 +46,10 @@ char *protocol_request(const char *body, ApiProtocol api) {
     cJSON_AddStringToObject(request, "model", text(source, "model"));
     cJSON_AddBoolToObject(request, "stream", true);
     cJSON_AddNumberToObject(request, "max_tokens", 4096);
-    cJSON_AddStringToObject(request, "reasoning_effort", "low");
+    const char *effort =
+        text(cJSON_GetObjectItemCaseSensitive(source, "reasoning"), "effort");
+    if (*effort)
+        cJSON_AddStringToObject(request, "reasoning_effort", effort);
     cJSON *messages = cJSON_AddArrayToObject(request, "messages");
     message(messages, "system", text(source, "instructions"));
     cJSON *input = cJSON_GetObjectItemCaseSensitive(source, "input");

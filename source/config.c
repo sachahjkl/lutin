@@ -11,7 +11,7 @@ const Config *config_get(void) { return &settings; }
 const char *config_error(void) { return error; }
 
 bool config_load(const char *path) {
-    settings = (Config){0, false, false};
+    settings = (Config){catalog_default(), false, false};
     error[0] = 0;
     FILE *file = fopen(path, "rb");
     if (!file) {

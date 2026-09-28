@@ -104,6 +104,7 @@
       cp ${rom}/lutin.nds "$out/roms/nds/lutin.nds"
       cp ${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt "$out/lutin/ca.pem"
       cp ${./examples/config.json} "$out/lutin/config.json"
+      cp ${./catalog/models.json} "$out/lutin/models.json"
       cp ${./examples/media.lua} "$out/lutin/projects/1/main.lua"
       cp ${./examples/hero.lua} "$out/lutin/projects/1/hero.lua"
       cp ${./examples/sounds.lua} "$out/lutin/projects/1/sounds.lua"
@@ -129,7 +130,8 @@
       } ''
           cc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -g -I${luaSource}/src -I${jsonSource}/embedded -I${./source} \
             ${./tests/agent.c} ${./tests/fat-rename.c} -Wl,--wrap=rename ${./source/agent.c} ${./source/tools.c} ${./source/workspace.c} \
-            ${./source/config.c} ${./source/runtime.c} ${luaSource}/src/*.c ${jsonSource}/embedded/cJSON.c -lm -o test-agent
+            ${./source/backend.c} ${./source/config.c} ${./source/runtime.c} ${luaSource}/src/*.c ${jsonSource}/embedded/cJSON.c -lm -o test-agent
+        cp ${./tests/catalog.json} models.json
         timeout 10 ./test-agent
           touch "$out"
       '';
@@ -142,7 +144,7 @@
         cc -std=c11 -D_POSIX_C_SOURCE=200809L -DCJSON_NESTING_LIMIT=64 -Wall -Wextra -Werror \
           -I${luaSource}/src -I${jsonSource}/embedded -I${./source} -I${./tests/support} \
           ${./tests/live-agent.c} ${./source/agent.c} ${./source/tools.c} ${./source/workspace.c} \
-          ${./source/config.c} ${./source/runtime.c} ${./source/network.c} ${./source/sse.c} ${./source/protocol.c} \
+          ${./source/backend.c} ${./source/config.c} ${./source/runtime.c} ${./source/network.c} ${./source/sse.c} ${./source/protocol.c} \
           ${luaSource}/src/*.c ${jsonSource}/embedded/cJSON.c -lcurl -lm -o "$out/bin/live-agent"
       '';
     workspaceCheck =
@@ -180,8 +182,9 @@
       } ''
         cc -std=c11 -DTEST_WIFI_CONTROL -Wall -Wextra -Werror -fsanitize=address,undefined \
           -I${./source} -I${./tests/support} -I${jsonSource}/embedded \
-          ${./tests/network.c} ${./source/network.c} ${./source/protocol.c} ${./source/sse.c} \
+          ${./tests/network.c} ${./source/backend.c} ${./source/network.c} ${./source/protocol.c} ${./source/sse.c} \
           ${jsonSource}/embedded/cJSON.c -Wl,--wrap=time -lcurl -o test-network
+        cp ${./tests/catalog.json} models.json
         timeout 10 ./test-network
         touch "$out"
       '';
@@ -206,14 +209,14 @@
         nativeBuildInputs = emulatorTools;
         FONTCONFIG_FILE = pkgs.makeFontsConf {fontDirectories = [pkgs.dejavu_fonts];};
       } ''
-        bash ${./scripts/check-emulator.sh} ${rom}/lutin.nds "$out" ${./tests/melonds.toml} ${schedulerRom}/scheduler.nds ${./examples}
+        bash ${./scripts/check-emulator.sh} ${rom}/lutin.nds "$out" ${./tests/melonds.toml} ${schedulerRom}/scheduler.nds ${./examples} ${./catalog/models.json}
       '';
     presentationCheck =
       pkgs.runCommand "lutin-presentation-check" {
         nativeBuildInputs = emulatorTools ++ [pkgs.ffmpeg-full];
         FONTCONFIG_FILE = pkgs.makeFontsConf {fontDirectories = [pkgs.dejavu_fonts];};
       } ''
-        bash ${./scripts/record-presentation.sh} ${presentationRom}/lutin.nds "$out" ${./tests/presentation} ${./tests/melonds.toml}
+        bash ${./scripts/record-presentation.sh} ${presentationRom}/lutin.nds "$out" ${./tests/presentation} ${./tests/melonds.toml} ${./tests/catalog.json}
       '';
     preCommitCheck = inputs.git-hooks.lib.${system}.run {
       package = pkgs.prek;
@@ -233,6 +236,8 @@
         shellcheck.enable = true;
         shfmt.enable = true;
         taplo.enable = true;
+        ruff.enable = true;
+        ruff-format.enable = true;
         stylua.enable = true;
         prettier = {
           enable = true;
@@ -262,6 +267,18 @@
       presentation = presentationCheck;
     };
     checks.${system} = {
+      catalog = pkgs.runCommand "lutin-catalog-check" {nativeBuildInputs = [pkgs.stdenv.cc pkgs.python3];} ''
+        cp ${./tests/catalog.json} models.json
+        chmod u+w models.json
+        cc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -I${./source} -I${jsonSource}/embedded \
+          ${./tests/catalog.c} ${./tests/fat-rename.c} -Wl,--wrap=rename ${./source/backend.c} ${jsonSource}/embedded/cJSON.c -o test-catalog
+        timeout 10 ./test-catalog
+        mkdir published
+        cp ${./catalog/models.json} published/models.json
+        ./test-catalog published
+        python3 ${./tests/catalog-generator.py} ${./scripts/build-catalog.py}
+        touch "$out"
+      '';
       media = pkgs.runCommand "lutin-media-check" {nativeBuildInputs = [pkgs.stdenv.cc];} ''
         mkdir -p projects/1
         cp ${./examples/media.lua} projects/1/main.lua
@@ -277,6 +294,7 @@
       presentation = presentationCheck;
       workflows = pkgs.runCommand "lutin-workflow-check" {nativeBuildInputs = [pkgs.actionlint pkgs.shellcheck];} ''
         actionlint ${./.github/workflows/ci.yml}
+        actionlint ${./.github/workflows/catalog.yml}
         touch "$out"
       '';
       input = pkgs.runCommand "lutin-input-check" {nativeBuildInputs = [pkgs.stdenv.cc];} ''
@@ -286,7 +304,8 @@
       '';
       config = pkgs.runCommand "lutin-config-check" {nativeBuildInputs = [pkgs.stdenv.cc];} ''
         cc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -I${./source} -I${jsonSource}/embedded \
-          ${./tests/config.c} ${./source/config.c} ${jsonSource}/embedded/cJSON.c -o test-config
+          ${./tests/config.c} ${./source/backend.c} ${./source/config.c} ${jsonSource}/embedded/cJSON.c -o test-config
+        cp ${./tests/catalog.json} models.json
         ./test-config
         touch "$out"
       '';
@@ -319,6 +338,7 @@
           specify
           sdFormatLinux
           pkgs.gnumake
+          pkgs.python3
           pkgs.git
           pkgs.curl
           pkgs.jq

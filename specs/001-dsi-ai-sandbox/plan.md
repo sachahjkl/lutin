@@ -32,6 +32,11 @@ DSi interface → agent → protocol adapter → HTTPS → OpenCode Go
 
 ## Technical decisions
 
+Provider definitions and model metadata load from `/lutin/models.json`.
+`models.local.json` supplies persistent personal overrides by ID.
+The command menu reloads local files or downloads a bounded compact catalog generated from models.dev and verified transport routes.
+Validation and FAT replacement preserve the previous catalog on failure.
+
 | Area           | Decision                                                         |
 | -------------- | ---------------------------------------------------------------- |
 | Console SDK    | BlocksDS/libnds and DSWiFi.                                      |

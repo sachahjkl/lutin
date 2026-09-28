@@ -57,12 +57,16 @@ typedef enum {
     MENU_SAVE,
     MENU_MODEL,
     MENU_TOOLS,
-    MENU_QUIT
+    MENU_QUIT,
+    MENU_RELOAD_CATALOG,
+    MENU_UPDATE_CATALOG
 } MenuAction;
 static View view;
 static bool modal, steer;
 static bool tools_expanded;
 static unsigned model_index;
+enum { MODEL_PAGE_SIZE = 12 };
+static bool catalog_updating;
 static unsigned session_items[12], session_count, session_index, session_after;
 static unsigned project_items[WORKSPACE_PROJECT_PAGE_SIZE], project_count,
     project_index, project_after;
@@ -74,10 +78,23 @@ static uint16_t frame_pixels[256 * 192];
 static PrintConsole top_console, bottom_console;
 static uint16_t top_map[32 * 32], bottom_map[32 * 32];
 static int program_background;
-static const char *menu_items[] = {
-    "Keyboard",    "Preview",      "Play controls", "Queue",        "Source",
-    "Run program", "Stop program", "Stop agent",    "Resume queue", "Sessions",
-    "Projects",    "Save source",  "Model",         "Tool details", "Quit"};
+static const char *menu_items[] = {"Keyboard",
+                                   "Preview",
+                                   "Play controls",
+                                   "Queue",
+                                   "Source",
+                                   "Run program",
+                                   "Stop program",
+                                   "Stop agent",
+                                   "Resume queue",
+                                   "Sessions",
+                                   "Projects",
+                                   "Save source",
+                                   "Model",
+                                   "Tool details",
+                                   "Quit",
+                                   "Reload model catalog",
+                                   "Update model catalog"};
 #define MENU_COUNT (sizeof(menu_items) / sizeof(*menu_items))
 
 static bool load(void) {
@@ -194,10 +211,29 @@ static bool action(MenuAction index) {
                                                    : workspace_error());
     } else if (index == MENU_MODEL) {
         view = MODELS;
-        model_index = agent_model();
+        model_index = agent_model() < BACKEND_COUNT ? agent_model() : 0;
     } else if (index == MENU_TOOLS) {
         tools_expanded = !tools_expanded;
         chat_scroll = 0;
+    } else if (index == MENU_RELOAD_CATALOG || index == MENU_UPDATE_CATALOG) {
+        if (agent_busy())
+            snprintf(message, sizeof(message),
+                     "Stop agent before catalog changes");
+        else if (agent_close()) {
+            if (index == MENU_RELOAD_CATALOG) {
+                if (catalog_load("/lutin")) {
+                    config_load("/lutin/config.json");
+                    model_index = 0;
+                    snprintf(message, sizeof(message), "%s",
+                             config_error()[0] ? config_error()
+                                               : "Model catalog reloaded");
+                } else
+                    snprintf(message, sizeof(message), "%s", catalog_error());
+            } else {
+                catalog_updating = network_update_catalog();
+                snprintf(message, sizeof(message), "%s", network_status());
+            }
+        }
     } else if (index == MENU_QUIT) {
         if (agent_close())
             return false;
@@ -246,7 +282,9 @@ static void render_top(bool storage) {
     page_text(runtime_error()[0] ? runtime_error() : message, 1);
     consoleSetCursor(&top_console, 0, 22);
     consoleSetColor(&top_console, CONSOLE_MAGENTA);
-    consolePrintString(backends[agent_model()].label);
+    consolePrintString(agent_model() < BACKEND_COUNT
+                           ? backends[agent_model()].label
+                           : "Select a catalog model");
     consoleSetCursor(&top_console, 0, 23);
     consoleSetColor(&top_console, CONSOLE_CYAN);
     printf("START Menu  Queue:%u %s", agent_queue_size(),
@@ -320,7 +358,9 @@ static void render_bottom(void) {
         consolePrintString("MODEL / A Select\n");
         consoleSetColor(&bottom_console, CONSOLE_LIGHT_GRAY);
         consolePrintString("UP/DOWN  START Menu\n\n");
-        for (unsigned i = 0; i < BACKEND_COUNT; i++) {
+        unsigned first = model_index / MODEL_PAGE_SIZE * MODEL_PAGE_SIZE;
+        for (unsigned i = first;
+             i < BACKEND_COUNT && i < first + MODEL_PAGE_SIZE; i++) {
             consoleSetColor(&bottom_console, i == model_index
                                                  ? CONSOLE_GREEN
                                                  : CONSOLE_LIGHT_GRAY);
@@ -368,6 +408,7 @@ int main(void) {
     bool storage = fatInitDefault();
     platform_input_init();
     workspace_init(storage, "/lutin");
+    catalog_load("/lutin");
     runtime_set_asset_reader(workspace_read);
     soundEnable();
     runtime_set_audio(platform_audio);
@@ -383,6 +424,8 @@ int main(void) {
     load();
     if (config_error()[0])
         snprintf(message, sizeof(message), "%s", config_error());
+    if (catalog_error()[0])
+        snprintf(message, sizeof(message), "%s", catalog_error());
     layout();
     unsigned frames = 0;
     bool running = true;
@@ -398,7 +441,10 @@ int main(void) {
         unsigned pressed = sample.pressed, held = sample.held;
         touchPosition touch = {.px = sample.touch_x, .py = sample.touch_y};
         bool menu_input = modal || (pressed & KEY_START);
-        if (pressed & KEY_START) {
+        if (catalog_updating) {
+            if (pressed & KEY_B)
+                network_stop();
+        } else if (pressed & KEY_START) {
             modal = !modal;
             layout();
         } else if (modal) {
@@ -533,16 +579,21 @@ int main(void) {
                         snprintf(message, sizeof(message), "%s",
                                  workspace_error());
                 }
-            } else if (view == MODELS) {
+            } else if (view == MODELS && BACKEND_COUNT) {
                 if (pressed & KEY_UP)
                     model_index =
                         (model_index + BACKEND_COUNT - 1) % BACKEND_COUNT;
                 if (pressed & KEY_DOWN)
                     model_index = (model_index + 1) % BACKEND_COUNT;
                 if ((pressed & KEY_TOUCH) && touch.py >= 24 &&
-                    touch.py < 24 + BACKEND_COUNT * 8) {
-                    model_index = (touch.py - 24) / 8;
-                    pressed |= KEY_A;
+                    touch.py < 24 + MODEL_PAGE_SIZE * 8) {
+                    unsigned selected =
+                        model_index / MODEL_PAGE_SIZE * MODEL_PAGE_SIZE +
+                        (touch.py - 24) / 8;
+                    if (selected < BACKEND_COUNT) {
+                        model_index = selected;
+                        pressed |= KEY_A;
+                    }
                 }
                 if ((pressed & KEY_A) && agent_select_model(model_index)) {
                     view = COMPOSE;
@@ -556,14 +607,29 @@ int main(void) {
                         source_scroll > 128 ? source_scroll - 128 : 0;
             }
         }
-        bool play = view == PLAY && !menu_input && !modal;
+        bool play = view == PLAY && !menu_input && !modal && !catalog_updating;
         InputSample game = platform_input_game(sample, play);
         if (held & KEY_TOUCH)
             touchRead(&touch);
         runtime_frame((RuntimeInput){frame_pixels, game.held, game.pressed,
                                      touch.px, touch.py,
                                      (game.held & KEY_TOUCH) != 0});
-        if (editing_queue < 0 && !pressed)
+        if (catalog_updating) {
+            network_tick();
+            snprintf(message, sizeof(message), "%s", network_status());
+            if (!network_busy()) {
+                catalog_updating = false;
+                if (network_catalog_updated()) {
+                    config_load("/lutin/config.json");
+                    model_index = 0;
+                    if (config_error()[0])
+                        snprintf(message, sizeof(message), "%s",
+                                 config_error());
+                } else if (pressed & KEY_B)
+                    snprintf(message, sizeof(message),
+                             "Catalog update cancelled");
+            }
+        } else if (editing_queue < 0 && !pressed)
             agent_tick();
         if (frames++ % 6 == 0 || pressed) {
             render_top(storage);

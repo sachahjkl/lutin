@@ -6,12 +6,14 @@ output=$(realpath -m "${2:?Supply the output directory.}")
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 fixtures=${3:-$root/tests/presentation}
 config=${4:-$root/tests/melonds.toml}
+catalog=${5:-$root/tests/catalog.json}
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$output" "$work/sd/lutin/projects/1" "$work/config/melonDS" "$work/runtime"
 chmod 700 "$work/runtime"
 cp "$fixtures/session.json" "$work/sd/lutin/projects/1/session-1.json"
 cp "$fixtures/responses.json" "$work/sd/lutin/replay.json"
+cp "$catalog" "$work/sd/lutin/models.json"
 chmod -R u+w "$work/sd"
 cp "$rom" "$work/lutin.nds"
 chmod u+w "$work/lutin.nds"

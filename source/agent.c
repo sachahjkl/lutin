@@ -270,8 +270,9 @@ static bool open_session(unsigned number) {
     if (!session)
         session = cJSON_CreateObject();
     if (!cJSON_GetObjectItemCaseSensitive(session, "model"))
-        cJSON_AddStringToObject(session, "model",
-                                backends[config_get()->default_model].id);
+        cJSON_AddStringToObject(
+            session, "model",
+            BACKEND_COUNT ? backends[config_get()->default_model].id : "");
     history = cJSON_GetObjectItemCaseSensitive(session, "history");
     queue = cJSON_GetObjectItemCaseSensitive(session, "queue");
     journal = cJSON_GetObjectItemCaseSensitive(session, "journal");
@@ -429,13 +430,12 @@ bool agent_reset(void) {
     cJSON *previous = transaction();
     if (!previous)
         return false;
-    unsigned model = agent_model();
     cJSON_Delete(session);
     session = cJSON_CreateObject();
     cJSON_AddArrayToObject(session, "history");
     cJSON_AddArrayToObject(session, "queue");
     cJSON_AddObjectToObject(session, "journal");
-    cJSON_AddStringToObject(session, "model", backends[model].id);
+    cJSON_AddStringToObject(session, "model", string(previous, "model"));
     char identifier[96];
     snprintf(identifier, sizeof(identifier), "lutin-reset-%lx-%lx",
              (unsigned long)time(NULL), (unsigned long)clock());
@@ -490,12 +490,22 @@ static void event(const char *data) {
 }
 
 static bool request(void) {
+    if (agent_model() >= BACKEND_COUNT) {
+        snprintf(status, sizeof(status), "Select an available catalog model");
+        paused = true;
+        return false;
+    }
     if (outputs && !completed && !save_interruption())
         return false;
     cJSON *body = cJSON_CreateObject();
     unsigned model = agent_model();
     network_set_backend(model, string(session, "network_id"));
     cJSON_AddStringToObject(body, "model", backends[model].model);
+    if (backends[model].reasoning_effort) {
+        cJSON *reasoning = cJSON_AddObjectToObject(body, "reasoning");
+        cJSON_AddStringToObject(reasoning, "effort",
+                                backends[model].reasoning_effort);
+    }
     cJSON_AddNumberToObject(body, "max_output_tokens", 4096);
     cJSON_AddStringToObject(body, "instructions", instructions);
     cJSON_AddBoolToObject(body, "stream", true);
@@ -669,6 +679,12 @@ void agent_tick(void) {
                  called ? "Turn limit reached" : "Agent done");
     }
     if (!paused && queue && cJSON_GetArraySize(queue)) {
+        if (agent_model() >= BACKEND_COUNT) {
+            paused = true;
+            snprintf(status, sizeof(status),
+                     "Select an available catalog model");
+            return;
+        }
         cJSON *previous = transaction();
         if (!previous)
             return;
@@ -689,7 +705,8 @@ unsigned agent_model(void) {
     for (unsigned i = 0; i < BACKEND_COUNT; i++)
         if (!strcmp(model, backends[i].id))
             return i;
-    return config_get()->default_model;
+    return !*model && BACKEND_COUNT ? config_get()->default_model
+                                    : BACKEND_COUNT;
 }
 
 bool agent_select_model(unsigned index) {

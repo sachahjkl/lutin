@@ -7,6 +7,7 @@ root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 config=${3:-$root/tests/melonds.toml}
 scheduler=$(realpath "${4:?Supply the scheduler test ROM path.}")
 fixtures=${5:-$root/examples}
+catalog=${6:-$root/catalog/models.json}
 mkdir -p "$output"
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
@@ -18,6 +19,7 @@ chmod 700 "$XDG_RUNTIME_DIR"
 cp "$config" "$XDG_CONFIG_HOME/melonDS/melonDS.toml"
 chmod u+w "$XDG_CONFIG_HOME/melonDS/melonDS.toml"
 mkdir -p "$work/sd/lutin/projects/1"
+cp "$catalog" "$work/sd/lutin/models.json"
 cp "$fixtures/media.lua" "$work/sd/lutin/projects/1/main.lua"
 cp "$fixtures/hero.lua" "$fixtures/sounds.lua" "$work/sd/lutin/projects/1/"
 chmod -R u+w "$work/sd"
@@ -96,7 +98,7 @@ timeout --kill-after=2 120 xvfb-run -a -s '-screen 0 800x1000x24' bash -euo pipe
   magick import -window "$window" "$output/models.png"
   tesseract "$output/models.png" "$output/models" -l eng --psm 6 2>> "$output/ocr.log"
   cat "$output/models.txt"
-  grep -Eiq "DeepSeek|Deepseek|DeepSeck" "$output/models.txt"
+  grep -Eiq "MODEL.*Select" "$output/models.txt"
   press Return Up Up Up Up Up Up a
   press Return Down Down Down Down a
   press x
@@ -105,6 +107,12 @@ timeout --kill-after=2 120 xvfb-run -a -s '-screen 0 800x1000x24' bash -euo pipe
   tesseract "$output/projects.png" "$output/projects" -l eng --psm 6 2>> "$output/ocr.log"
   cat "$output/projects.txt"
   grep -Eiq "Project 2" "$output/projects.txt"
+  press Return Down Down Down Down Down a
+  sleep 1
+  magick import -window "$window" "$output/catalog.png"
+  tesseract "$output/catalog.png" "$output/catalog" -l eng --psm 6 2>> "$output/ocr.log"
+  cat "$output/catalog.txt"
+  grep -Eiq "catalog reloaded" "$output/catalog.txt"
   kill -KILL "$emulator"
   wait "$emulator" 2>/dev/null || true
   stdbuf -oL -eL melonDS "$3" > "$output/scheduler.log" 2>&1 &

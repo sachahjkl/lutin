@@ -125,6 +125,10 @@ Stop program ends the creation without clearing the session.
 
 ## Network status
 
+Open **START → Diagnostics** to read the full saved network error.
+Left/Right switches between network, agent, program, and interface diagnostics.
+The compact status area above the conversation shows only the first two lines.
+
 WiFi shows OFF before initialization, JOIN during association, ON when connected, or DOWN after disconnection.
 Association retries at most three times, with five-second delays.
 Idle reconnection attempts run every thirty seconds after a lost connection.

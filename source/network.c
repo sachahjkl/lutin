@@ -35,7 +35,7 @@ static SseParser parser;
 static char error_body[4096];
 static size_t received;
 static bool local_error;
-static char status[160] = "Network idle";
+static char status[CURL_ERROR_SIZE] = "Network idle";
 static char token_path[256];
 static char request_url[256];
 static char ca_path[256] = "/lutin/ca.pem";

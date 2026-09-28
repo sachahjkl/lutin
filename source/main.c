@@ -40,7 +40,8 @@ typedef enum {
     SOURCE,
     MODELS,
     SESSIONS,
-    PROJECTS
+    PROJECTS,
+    DIAGNOSTICS
 } View;
 typedef enum {
     MENU_KEYBOARD,
@@ -59,7 +60,8 @@ typedef enum {
     MENU_TOOLS,
     MENU_QUIT,
     MENU_RELOAD_CATALOG,
-    MENU_UPDATE_CATALOG
+    MENU_UPDATE_CATALOG,
+    MENU_DIAGNOSTICS
 } MenuAction;
 static View view;
 static bool modal, steer;
@@ -67,6 +69,10 @@ static bool tools_expanded;
 static unsigned model_index;
 enum { MODEL_PAGE_SIZE = 12 };
 static bool catalog_updating;
+static unsigned diagnostic_index;
+static const char *diagnostic_names[] = {"Network", "Agent", "Program",
+                                         "Interface"};
+#define DIAGNOSTIC_COUNT (sizeof(diagnostic_names) / sizeof(*diagnostic_names))
 static unsigned session_items[12], session_count, session_index, session_after;
 static unsigned project_items[WORKSPACE_PROJECT_PAGE_SIZE], project_count,
     project_index, project_after;
@@ -94,7 +100,8 @@ static const char *menu_items[] = {"Keyboard",
                                    "Tool details",
                                    "Quit",
                                    "Reload model catalog",
-                                   "Update model catalog"};
+                                   "Update model catalog",
+                                   "Diagnostics"};
 #define MENU_COUNT (sizeof(menu_items) / sizeof(*menu_items))
 
 static bool load(void) {
@@ -234,6 +241,9 @@ static bool action(MenuAction index) {
                 snprintf(message, sizeof(message), "%s", network_status());
             }
         }
+    } else if (index == MENU_DIAGNOSTICS) {
+        view = DIAGNOSTICS;
+        diagnostic_index = 0;
     } else if (index == MENU_QUIT) {
         if (agent_close())
             return false;
@@ -354,6 +364,15 @@ static void render_bottom(void) {
                    project_items[i], project_items[i] == project ? " *" : "");
         if (!project_count)
             consolePrintString("No projects on this page.\n");
+    } else if (view == DIAGNOSTICS) {
+        const char *details[] = {network_status(), agent_status(),
+                                 runtime_error(), message};
+        printf("DIAGNOSTICS / %s\n", diagnostic_names[diagnostic_index]);
+        consoleSetColor(&bottom_console, CONSOLE_LIGHT_GRAY);
+        consolePrintString("LEFT/RIGHT Category\nSTART Menu\n\n");
+        page_text(details[diagnostic_index][0] ? details[diagnostic_index]
+                                               : "No diagnostic recorded.",
+                  20);
     } else if (view == MODELS) {
         consolePrintString("MODEL / A Select\n");
         consoleSetColor(&bottom_console, CONSOLE_LIGHT_GRAY);
@@ -579,6 +598,14 @@ int main(void) {
                         snprintf(message, sizeof(message), "%s",
                                  workspace_error());
                 }
+            } else if (view == DIAGNOSTICS) {
+                if (pressed & KEY_LEFT)
+                    diagnostic_index =
+                        (diagnostic_index + DIAGNOSTIC_COUNT - 1) %
+                        DIAGNOSTIC_COUNT;
+                if (pressed & KEY_RIGHT)
+                    diagnostic_index =
+                        (diagnostic_index + 1) % DIAGNOSTIC_COUNT;
             } else if (view == MODELS && BACKEND_COUNT) {
                 if (pressed & KEY_UP)
                     model_index =

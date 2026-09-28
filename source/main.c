@@ -285,9 +285,8 @@ static void render_bottom(void) {
             printf("%s %s\n", i == model_index ? ">" : " ", backends[i].label);
         }
         consoleSetColor(&bottom_console, CONSOLE_LIGHT_GRAY);
-        consolePrintString(
-            "\nSelection pauses the agent.\nQueue is kept.\nGo key: "
-            "/ai-dsi/opencode-key\n");
+        consolePrintString("\nSelection pauses the agent.\nQueue is "
+                           "kept.\nKeys: /lutin/keys/<provider>\n");
     } else {
         consolePrintString("main.lua  UP/DOWN Scroll\n");
         consoleSetColor(&bottom_console, CONSOLE_LIGHT_GRAY);
@@ -326,8 +325,8 @@ int main(void) {
     bottom_console.fontBgMap = bottom_map;
     bool storage = fatInitDefault();
     platform_input_init();
-    workspace_init(storage, "/ai-dsi");
-    config_load("/ai-dsi/config.json");
+    workspace_init(storage, "/lutin");
+    config_load("/lutin/config.json");
     tools_expanded = config_get()->tool_details;
     view = config_get()->start_in_sessions ? SESSIONS : COMPOSE;
     refresh_sessions();

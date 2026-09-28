@@ -7,11 +7,11 @@ output=$(realpath -m "${3:?Supply the capture directory.}")
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
-mkdir -p "$output" "$work/sd/ai-dsi/projects/1" "$work/config/melonDS" "$work/runtime"
+mkdir -p "$output" "$work/sd/lutin/projects/1" "$work/config/melonDS" "$work/runtime"
 chmod 700 "$work/runtime"
-cp "$session" "$work/sd/ai-dsi/projects/1/session-1.json"
-cp "$rom" "$work/ai-dsi.nds"
-chmod u+w "$work/ai-dsi.nds"
+cp "$session" "$work/sd/lutin/projects/1/session-1.json"
+cp "$rom" "$work/lutin.nds"
+chmod u+w "$work/lutin.nds"
 cp "$root/tests/melonds.toml" "$work/config/melonDS/melonDS.toml"
 chmod u+w "$work/config/melonDS/melonDS.toml"
 cat >>"$work/config/melonDS/melonDS.toml" <<EOF
@@ -42,4 +42,4 @@ timeout --kill-after=2 30 xvfb-run -a -s '-screen 0 800x1000x24' bash -euo pipef
   cat "$output/conversation.txt"
   grep -Eiq "^YOU$" "$output/conversation.txt"
   grep -Eiq "^AGENT$" "$output/conversation.txt"
-' capture-conversation "$output" "$work/ai-dsi.nds"
+' capture-conversation "$output" "$work/lutin.nds"

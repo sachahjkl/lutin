@@ -11,7 +11,7 @@
 /.env.*
 !/.env.example
 /secrets/
-**/opencode-key
+**/keys/
 **/token
 **/session-*.json
 **/nand.bin

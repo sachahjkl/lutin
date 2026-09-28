@@ -316,6 +316,9 @@ int main(void) {
     assert(agent_submit("keep when switching", false));
     assert(agent_select_model(3));
     assert(agent_model() == 3 && agent_queue_size() == 1);
+    char *saved_model = workspace_read("session-7.json", 1024 * 1024);
+    assert(saved_model && strstr(saved_model, "opencode-go/deepseek-v4-flash"));
+    free(saved_model);
     assert(agent_open(7) && agent_model() == 3);
     assert(mkdir(temporary, 0700) == 0);
     assert(!agent_select_model(0) && agent_model() == 3);
@@ -324,6 +327,7 @@ int main(void) {
     assert(agent_resume());
     agent_tick();
     assert(strstr(request_body, "deepseek-v4-flash"));
+    assert(!strstr(request_body, "opencode-go/deepseek-v4-flash"));
     agent_stop();
     assert(workspace_select(42));
     unsigned created = 0, numbers[4], count;

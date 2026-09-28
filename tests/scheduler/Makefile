@@ -1,5 +1,5 @@
 NAME := scheduler
-GAME_TITLE := AI DSi Scheduler Test
+GAME_TITLE := Lutin Scheduler Test
 SOURCEDIRS := .
 INCLUDEDIRS := ../../source
 LIBS := -lnds9

@@ -1,5 +1,5 @@
 {
-  "default_model": "gpt-6-luna",
+  "default_model": "opencode-go/gpt-6-luna",
   "tool_details": false,
   "startup_view": "keyboard"
 }

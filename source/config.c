@@ -47,7 +47,7 @@ bool config_load(const char *path) {
             bit = 1;
             if (cJSON_IsString(item)) {
                 for (unsigned i = 0; i < BACKEND_COUNT; i++)
-                    if (!strcmp(item->valuestring, backends[i].model)) {
+                    if (!strcmp(item->valuestring, backends[i].id)) {
                         candidate.default_model = i;
                         valid = true;
                     }

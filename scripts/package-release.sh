@@ -10,7 +10,7 @@ fi
 mkdir -p "$output"
 rom=$(nix build .#rom --no-link --print-out-paths)
 kit=$(nix build .#release-kit --no-link --print-out-paths)
-cp "$rom/ai-dsi.nds" "$output/lutin-$version.nds"
+install -m 644 "$rom/lutin.nds" "$output/lutin-$version.nds"
 rm -f "$output/lutin-$version-sd.zip"
 (
 	cd "$kit"

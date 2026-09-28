@@ -13,8 +13,9 @@ static void write_config(const char *text) {
 int main(void) {
     assert(config_load("absent.json"));
     assert(config_get()->default_model == 0);
-    write_config("{\"default_model\":\"deepseek-v4-flash\",\"tool_details\":"
-                 "true,\"startup_view\":\"sessions\"}");
+    write_config(
+        "{\"default_model\":\"opencode-go/deepseek-v4-flash\",\"tool_details\":"
+        "true,\"startup_view\":\"sessions\"}");
     assert(config_load("config.json"));
     assert(config_get()->default_model == 3 && config_get()->tool_details &&
            config_get()->start_in_sessions);
@@ -24,11 +25,14 @@ int main(void) {
         "{",
         "{} trailing",
         "{\"default_model\":\"unknown\"}",
+        "{\"default_model\":\"deepseek-v4-flash\"}",
+        "{\"default_model\":\"other-provider/deepseek-v4-flash\"}",
         "{\"tool_details\":1}",
         "{\"startup_view\":\"play\"}",
         "{\"token\":\"secret\"}",
         "{\"tool_details\":true,\"tool_details\":false}",
-        "{\"default_model\":\"deepseek-v4-flash\",\"startup_view\":false}"};
+        "{\"default_model\":\"opencode-go/"
+        "deepseek-v4-flash\",\"startup_view\":false}"};
     for (unsigned i = 0; i < sizeof(invalid) / sizeof(*invalid); i++) {
         write_config(invalid[i]);
         assert(!config_load("config.json"));

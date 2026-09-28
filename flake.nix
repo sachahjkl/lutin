@@ -64,7 +64,7 @@
       fileset = pkgs.lib.fileset.unions [./Makefile ./source];
     };
     rom = pkgs.blocksdsNix.stdenvBlocksdsSlim.mkDerivation {
-      pname = "ai-dsi";
+      pname = "lutin";
       version = "0.3.0";
       src = source;
       nativeBuildInputs = [pkgs.gnumake];
@@ -74,26 +74,46 @@
       installPhase = ''
         runHook preInstall
         mkdir -p "$out"
-        cp ai-dsi.nds "$out/"
+        cp lutin.nds "$out/"
         runHook postInstall
       '';
     };
+    reverseFind = pkgs.writeShellScriptBin "find" ''
+      set -euo pipefail
+      ${pkgs.findutils}/bin/find "$@" | ${pkgs.coreutils}/bin/sort -r
+    '';
+    reproducibleRomCheck = rom.overrideAttrs (_: {
+      pname = "lutin-rom-reproducibility";
+      preBuild = ''export PATH="${reverseFind}/bin:$PATH"'';
+      installPhase = ''
+        cmp lutin.nds ${rom}/lutin.nds
+        touch "$out"
+      '';
+    });
+    presentationRom = rom.overrideAttrs (_: {
+      pname = "lutin-presentation";
+      src = pkgs.lib.fileset.toSource {
+        root = ./.;
+        fileset = pkgs.lib.fileset.unions [./Makefile ./source ./tests/presentation/network.c];
+      };
+      makeFlags = ["NETWORK_SOURCE=tests/presentation/network.c"];
+    });
     installationKit = import ./nix/installation-kit.nix {inherit pkgs rom;};
     releaseKit = pkgs.runCommand "lutin-sd-kit" {} ''
-      mkdir -p "$out/roms/nds" "$out/ai-dsi/projects/1"
-      cp ${rom}/ai-dsi.nds "$out/roms/nds/ai-dsi.nds"
-      cp ${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt "$out/ai-dsi/ca.pem"
-      cp ${./examples/config.json} "$out/ai-dsi/config.json"
-      cp ${./examples/animation.lua} "$out/ai-dsi/projects/1/main.lua"
+      mkdir -p "$out/roms/nds" "$out/lutin/projects/1" "$out/lutin/keys"
+      cp ${rom}/lutin.nds "$out/roms/nds/lutin.nds"
+      cp ${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt "$out/lutin/ca.pem"
+      cp ${./examples/config.json} "$out/lutin/config.json"
+      cp ${./examples/animation.lua} "$out/lutin/projects/1/main.lua"
       cp ${./docs/usage.md} "$out/usage.md"
       cp ${./docs/install-dsi.md} "$out/install-dsi.md"
       cp ${./LICENSE} "$out/LICENSE"
       cp ${./THIRD_PARTY.md} "$out/THIRD_PARTY.md"
-      test -s "$out/roms/nds/ai-dsi.nds"
-      test -s "$out/ai-dsi/ca.pem"
+      test -s "$out/roms/nds/lutin.nds"
+      test -s "$out/lutin/ca.pem"
     '';
     runtimeCheck =
-      pkgs.runCommand "ai-dsi-runtime-check" {
+      pkgs.runCommand "lutin-runtime-check" {
         nativeBuildInputs = [pkgs.stdenv.cc];
       } ''
           cc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -g -I${luaSource}/src -I${./source} \
@@ -102,7 +122,7 @@
           touch "$out"
       '';
     agentCheck =
-      pkgs.runCommand "ai-dsi-agent-check" {
+      pkgs.runCommand "lutin-agent-check" {
         nativeBuildInputs = [pkgs.stdenv.cc];
       } ''
           cc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -g -I${luaSource}/src -I${jsonSource}/embedded -I${./source} \
@@ -112,7 +132,7 @@
           touch "$out"
       '';
     liveAgent =
-      pkgs.runCommand "ai-dsi-live-agent" {
+      pkgs.runCommand "lutin-live-agent" {
         nativeBuildInputs = [pkgs.stdenv.cc];
         buildInputs = [pkgs.curl];
       } ''
@@ -124,7 +144,7 @@
           ${luaSource}/src/*.c ${jsonSource}/embedded/cJSON.c -lcurl -lm -o "$out/bin/live-agent"
       '';
     workspaceCheck =
-      pkgs.runCommand "ai-dsi-workspace-check" {
+      pkgs.runCommand "lutin-workspace-check" {
         nativeBuildInputs = [pkgs.stdenv.cc];
       } ''
         cc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -g -I${./source} \
@@ -134,7 +154,7 @@
         touch "$out"
       '';
     chatCheck =
-      pkgs.runCommand "ai-dsi-chat-check" {
+      pkgs.runCommand "lutin-chat-check" {
         nativeBuildInputs = [pkgs.stdenv.cc];
       } ''
         cc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -I${./source} \
@@ -143,7 +163,7 @@
         touch "$out"
       '';
     protocolCheck =
-      pkgs.runCommand "ai-dsi-protocol-check" {
+      pkgs.runCommand "lutin-protocol-check" {
         nativeBuildInputs = [pkgs.stdenv.cc];
       } ''
         cc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -I${./source} -I${jsonSource}/embedded \
@@ -152,7 +172,7 @@
         touch "$out"
       '';
     networkCheck =
-      pkgs.runCommand "ai-dsi-network-check" {
+      pkgs.runCommand "lutin-network-check" {
         nativeBuildInputs = [pkgs.stdenv.cc];
         buildInputs = [pkgs.curl];
       } ''
@@ -166,7 +186,7 @@
     sdFormatLinux = import ./nix/sd-format-linux.nix {inherit pkgs;};
     emulatorTools = with pkgs; [melonds xvfb-run xdotool imagemagick tesseract];
     schedulerRom = pkgs.blocksdsNix.stdenvBlocksdsSlim.mkDerivation {
-      pname = "ai-dsi-scheduler-test";
+      pname = "lutin-scheduler-test";
       version = "1";
       src = pkgs.lib.fileset.toSource {
         root = ./.;
@@ -180,11 +200,18 @@
       '';
     };
     emulatorCheck =
-      pkgs.runCommand "ai-dsi-emulator-check" {
+      pkgs.runCommand "lutin-emulator-check" {
         nativeBuildInputs = emulatorTools;
         FONTCONFIG_FILE = pkgs.makeFontsConf {fontDirectories = [pkgs.dejavu_fonts];};
       } ''
-        bash ${./scripts/check-emulator.sh} ${rom}/ai-dsi.nds "$out" ${./tests/melonds.toml} ${schedulerRom}/scheduler.nds
+        bash ${./scripts/check-emulator.sh} ${rom}/lutin.nds "$out" ${./tests/melonds.toml} ${schedulerRom}/scheduler.nds
+      '';
+    presentationCheck =
+      pkgs.runCommand "lutin-presentation-check" {
+        nativeBuildInputs = emulatorTools ++ [pkgs.ffmpeg-full];
+        FONTCONFIG_FILE = pkgs.makeFontsConf {fontDirectories = [pkgs.dejavu_fonts];};
+      } ''
+        bash ${./scripts/record-presentation.sh} ${presentationRom}/lutin.nds "$out" ${./tests/presentation} ${./tests/melonds.toml}
       '';
     preCommitCheck = inputs.git-hooks.lib.${system}.run {
       package = pkgs.prek;
@@ -229,8 +256,13 @@
       sd-format-linux = sdFormatLinux;
       emulator-check = emulatorCheck;
       live-agent = liveAgent;
+      presentation-rom = presentationRom;
+      presentation = presentationCheck;
     };
     checks.${system} = {
+      reproducible-rom = reproducibleRomCheck;
+      presentation-rom = presentationRom;
+      presentation = presentationCheck;
       workflows = pkgs.runCommand "lutin-workflow-check" {nativeBuildInputs = [pkgs.actionlint pkgs.shellcheck];} ''
         actionlint ${./.github/workflows/ci.yml}
         touch "$out"
@@ -259,7 +291,7 @@
       runtime = runtimeCheck;
       agent = agentCheck;
       live-agent-build = liveAgent;
-      sse = pkgs.runCommand "ai-dsi-sse-check" {nativeBuildInputs = [pkgs.stdenv.cc];} ''
+      sse = pkgs.runCommand "lutin-sse-check" {nativeBuildInputs = [pkgs.stdenv.cc];} ''
         cc -std=c11 -Wall -Wextra -Werror -I${./source} ${./source/sse.c} ${./tests/sse.c} -o test-sse
         ./test-sse
         touch "$out"

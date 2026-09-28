@@ -5,7 +5,7 @@
   sources = builtins.fromJSON (builtins.readFile ./installation-sources.json);
   downloads = pkgs.lib.mapAttrs (name: source: pkgs.fetchurl (source // {inherit name;})) sources;
 in
-  pkgs.runCommand "ai-dsi-installation-kit" {
+  pkgs.runCommand "lutin-installation-kit" {
     nativeBuildInputs = [pkgs._7zz];
   } ''
     mkdir -p "$out"/{downloads,01-backup,02-menu,emulation,memory-pit/{facebook,no-facebook}}
@@ -24,12 +24,12 @@ in
     7zz x ${downloads."TWiLightMenu-DSi.7z"} -otwilight
     cp -r twilight/_nds twilight/roms twilight/BOOT.NDS "$out/02-menu/"
     cp ${downloads."unlaunch-installer.dsi"} "$out/02-menu/unlaunch-installer.dsi"
-    cp ${rom}/ai-dsi.nds "$out/02-menu/roms/nds/ai-dsi.nds"
-    mkdir -p "$out/02-menu/ai-dsi"
-    cp ${../examples/config.json} "$out/02-menu/ai-dsi/config.json"
-    cp ${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt "$out/02-menu/ai-dsi/ca.pem"
-    mkdir -p "$out/02-menu/ai-dsi/projects/1"
-    cp ${../examples/animation.lua} "$out/02-menu/ai-dsi/projects/1/main.lua"
+    cp ${rom}/lutin.nds "$out/02-menu/roms/nds/lutin.nds"
+    mkdir -p "$out/02-menu/lutin/keys"
+    cp ${../examples/config.json} "$out/02-menu/lutin/config.json"
+    cp ${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt "$out/02-menu/lutin/ca.pem"
+    mkdir -p "$out/02-menu/lutin/projects/1"
+    cp ${../examples/animation.lua} "$out/02-menu/lutin/projects/1/main.lua"
     7zz x ${downloads."dsibiosdumper.7z"} -o"$out/emulation"
     test -s "$out/02-menu/BOOT.NDS"
     test -s "$out/02-menu/_nds/nds-bootstrap-hb-release.nds"

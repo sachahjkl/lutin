@@ -12,14 +12,14 @@ Build the kit:
 nix build .#installation-kit -o result-installation
 ```
 
-1. Copy `02-menu/roms/nds/ai-dsi.nds` to `/roms/nds/ai-dsi.nds` on the SD card.
-2. Copy `02-menu/ai-dsi/ca.pem` to `/ai-dsi/ca.pem`.
-3. Copy `02-menu/ai-dsi/config.json` to `/ai-dsi/config.json` for an initial installation.
-4. Save your OpenCode Go API key in `/ai-dsi/opencode-key` as plain text.
+1. Copy `02-menu/roms/nds/lutin.nds` to `/roms/nds/lutin.nds` on the SD card.
+2. Copy `02-menu/lutin/ca.pem` to `/lutin/ca.pem`.
+3. Copy `02-menu/lutin/config.json` to `/lutin/config.json` for an initial installation.
+4. Save your OpenCode Go API key in `/lutin/keys/opencode-go` as plain text.
 5. Configure Wi-Fi and the correct date and time in the console system settings.
 6. Launch the ROM through TWiLight Menu++ in DSi mode.
 
-For an offline example, copy `02-menu/ai-dsi/projects/1/main.lua` into the corresponding SD directory.
+For an offline example, copy `02-menu/lutin/projects/1/main.lua` into the corresponding SD directory.
 Do not replace an existing creation with this example.
 For later updates, replace the ROM and update the CA bundle when needed.
 
@@ -65,7 +65,7 @@ Holding A + B at startup opens Unlaunch on the tested setup.
 
 ## First launch
 
-1. Open `/roms/nds/ai-dsi.nds` from TWiLight Menu++.
+1. Open `/roms/nds/lutin.nds` from TWiLight Menu++.
 2. Check that the upper screen reports DSi mode.
 3. Press START and select Run program.
 4. Open Play controls to route buttons and touch to an interactive creation.
@@ -79,8 +79,8 @@ If the mode is DS, check the launch location and DSi-mode settings before testin
 
 | Symptom                            | Check                                                                      |
 | ---------------------------------- | -------------------------------------------------------------------------- |
-| Missing key                        | The file must be `/ai-dsi/opencode-key`, containing only the key.          |
-| Certificate error                  | Check the console clock and `/ai-dsi/ca.pem`.                              |
+| Missing key                        | The file must be `/lutin/keys/opencode-go`, containing only the key.       |
+| Certificate error                  | Check the console clock and `/lutin/ca.pem`.                               |
 | Wi-Fi association fails            | Check the console Wi-Fi profile, DSi mode, and access-point compatibility. |
 | HTTP 401 or 403                    | Check the key and account access through OpenCode Go.                      |
 | Buttons do not affect the creation | Select Play controls, then release buttons held while closing the menu.    |

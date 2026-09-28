@@ -26,7 +26,8 @@ Treat hardware timing limits as targets until measured.
 ## IV. Reuse maintained components
 
 Use BlocksDS for the native toolchain and console libraries.
-Use OpenCode Go directly over HTTPS without personal infrastructure.
+Use provider definitions for HTTPS endpoints and provider-specific headers.
+Namespace model IDs and credentials by provider.
 Keep networking, interface, storage, and execution separate.
 Add dependencies only for a required capability.
 

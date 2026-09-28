@@ -37,6 +37,12 @@ Remove credentials and personal conversation text from shared logs.
 See the architecture diagram in `README.md` and the contracts in `specs/001-dsi-ai-sandbox/contracts/`.
 The development decision record is in `specs/001-dsi-ai-sandbox/`.
 
+Provider definitions and models are separate in `source/backend.h`.
+Give each provider a stable ID and each model a `provider/model` ID.
+The provider owns its service URL, authentication header, and optional session header.
+Its credential is loaded from `/lutin/keys/<provider-id>`.
+Add protocol and transport tests when integrating a provider.
+
 ## CI and releases
 
 GitHub Actions runs `nix flake check` for pull requests and branch pushes.

@@ -39,6 +39,10 @@ The FAT rename shim reproduces the console behavior that rejects an existing des
 
 ## Emulator checks
 
+The `reproducible-rom` check rebuilds with reversed source-file discovery and compares the binary with the normal ROM.
+The Makefile sorts the C source list before the SDK constructs its object list.
+This removes the filesystem-order difference observed between local and GitHub runner builds.
+
 `scripts/check-emulator.sh` launches the built ROM in melonDS under Xvfb.
 It checks chat, keyboard, START menu, program launch, return from gameplay, and model selection through screen captures and OCR.
 The emulator uses isolated configuration and a writable ROM copy.
@@ -92,15 +96,18 @@ Full DSi emulation, maximum combined Lua/TLS memory, native-operation latency, a
 
 ## Presentation video
 
-`docs/media/presentation.mp4` records the actual ROM in melonDS.
-It shows the offline interface and bundled animation, not a live model request.
+`docs/media/presentation.mp4` records a running session in melonDS.
+The presentation build replays responses from an authenticated DeepSeek request, with the actual agent and tools executing in the ROM.
+The session writes a greeting program, detects undefined button constants, patches them, reruns the program, and checks its runtime.
+The replay transport displays `REPLAY` and is compiled only into `presentation-rom`.
+The normal release ROM uses HTTPS.
 The GIF is a reduced-frame-rate preview of the same recording.
 
 Rebuild it with:
 
 ```sh
-nix build .#rom -o result-rom
-nix develop --command bash scripts/record-presentation.sh result-rom/ai-dsi.nds /tmp/opencode/lutin-presentation
+nix build .#presentation-rom -o result-presentation
+nix develop --command bash scripts/record-presentation.sh result-presentation/lutin.nds /tmp/opencode/lutin-presentation
 ```
 
 ## Installation kit

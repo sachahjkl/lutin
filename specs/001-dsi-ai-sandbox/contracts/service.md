@@ -1,7 +1,13 @@
 # OpenCode Go service contract
 
 Lutin calls OpenCode Go directly over HTTPS.
-The personal API key is loaded from `/ai-dsi/opencode-key` on SD.
+The provider API key is loaded from `/lutin/keys/opencode-go` on SD.
+
+Provider definitions own their base URL, authentication header, and optional session header.
+Model definitions reference a provider and select a protocol.
+Configuration and sessions use qualified IDs such as `opencode-go/deepseek-v4-flash`.
+The outgoing request sends the provider's model name, such as `deepseek-v4-flash`.
+Credential filenames use the provider ID, so separate providers never share an implicit global key.
 
 | Model               | Protocol         | URL                                              |
 | ------------------- | ---------------- | ------------------------------------------------ |
@@ -16,7 +22,7 @@ Responses use function tools and Server-Sent Events, abbreviated SSE.
 The adapter retains DeepSeek reasoning content needed for subsequent tool turns.
 Incomplete generations never execute tools.
 
-The client validates certificates with `/ai-dsi/ca.pem` and does not follow HTTP redirects.
+The client validates certificates with `/lutin/ca.pem` and does not follow HTTP redirects.
 Available models depend on OpenCode Go and the user's account.
 The project supplies no account or API key.
 

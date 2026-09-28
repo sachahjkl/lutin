@@ -29,15 +29,16 @@ static time_t started, wifi_deadline, retry_at, last_data, idle_retry;
 static unsigned wifi_attempt;
 static unsigned backend_index;
 static char session_header[160];
-static char key_directory[192] = "/ai-dsi";
+static char key_directory[192] = "/lutin";
 static char *body_copy;
 static SseParser parser;
 static char error_body[4096];
 static size_t received;
 static bool local_error;
 static char status[160] = "Network idle";
-static char token_path[256] = "/ai-dsi/opencode-key";
-static char ca_path[256] = "/ai-dsi/ca.pem";
+static char token_path[256];
+static char request_url[256];
+static char ca_path[256] = "/lutin/ca.pem";
 static char curl_error[CURL_ERROR_SIZE];
 
 static bool add_header(const char *value) {
@@ -50,14 +51,16 @@ static bool add_header(const char *value) {
 
 void network_set_directory(const char *directory) {
     snprintf(key_directory, sizeof(key_directory), "%s", directory);
-    snprintf(token_path, sizeof(token_path), "%s/opencode-key", directory);
     snprintf(ca_path, sizeof(ca_path), "%s/ca.pem", directory);
 }
 
 void network_set_backend(unsigned index, const char *session_id) {
     backend_index = index < BACKEND_COUNT ? index : 0;
-    snprintf(session_header, sizeof(session_header),
-             "x-opencode-session: %.120s", session_id);
+    const Provider *provider = backends[backend_index].provider;
+    session_header[0] = 0;
+    if (provider->session_header)
+        snprintf(session_header, sizeof(session_header), "%s: %.120s",
+                 provider->session_header, session_id);
     for (char *p = session_header; *p; p++)
         if (*p == '\r' || *p == '\n')
             *p = '_';
@@ -126,13 +129,16 @@ void network_stop(void) {
 bool network_start(const char *body, NetworkEvent event) {
     network_stop();
     const Backend *backend = &backends[backend_index];
-    snprintf(token_path, sizeof(token_path), "%s/%s", key_directory,
-             backend->key_file);
+    const Provider *provider = backend->provider;
+    snprintf(token_path, sizeof(token_path), "%s/keys/%s", key_directory,
+             provider->id);
+    snprintf(request_url, sizeof(request_url), "%s/%s", provider->base_url,
+             backend->protocol == API_RESPONSES ? "responses"
+                                                : "chat/completions");
     char token[512];
     FILE *file = fopen(token_path, "rb");
     if (!file) {
-        snprintf(status, sizeof(status), "Missing key: /ai-dsi/%s",
-                 backend->key_file);
+        snprintf(status, sizeof(status), "Missing key: %.140s", token_path);
         return false;
     }
     size_t length = fread(token, 1, sizeof(token) - 1, file);
@@ -147,15 +153,16 @@ bool network_start(const char *body, NetworkEvent event) {
         return false;
     }
     char authorization[560];
-    snprintf(authorization, sizeof(authorization), "%s: Bearer %s",
-             backend->auth_header, token);
+    snprintf(authorization, sizeof(authorization), "%s %s",
+             provider->auth_header, token);
     memset(token, 0, sizeof(token));
     bool headers_ok = add_header(authorization);
     memset(authorization, 0, sizeof(authorization));
     headers_ok = headers_ok && add_header("Content-Type: application/json") &&
                  add_header("Accept: text/event-stream") &&
                  add_header("Expect:");
-    headers_ok = headers_ok && add_header(session_header);
+    if (session_header[0])
+        headers_ok = headers_ok && add_header(session_header);
     body_copy = protocol_request(body, backend_protocol(backend_index));
     if (!initialized) {
         initialized = Wifi_InitDefault(INIT_ONLY | WIFI_ATTEMPT_DSI_MODE);
@@ -229,7 +236,7 @@ void network_tick(void) {
             network_stop();
             return;
         }
-        curl_easy_setopt(request, CURLOPT_URL, backends[backend_index].url);
+        curl_easy_setopt(request, CURLOPT_URL, request_url);
         curl_error[0] = 0;
         curl_easy_setopt(request, CURLOPT_ERRORBUFFER, curl_error);
         curl_easy_setopt(request, CURLOPT_HTTPHEADER, headers);

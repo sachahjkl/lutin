@@ -11,14 +11,15 @@
 
 int main(int argc, char **argv) {
     if (argc != 4) {
-        fprintf(stderr, "Usage: live-agent DIRECTORY MODEL_INDEX PROMPT\n");
+        fprintf(stderr, "Usage: live-agent DIRECTORY PROVIDER/MODEL PROMPT\n");
         for (unsigned i = 0; i < BACKEND_COUNT; i++)
-            fprintf(stderr, "%u: %s\n", i, backends[i].label);
+            fprintf(stderr, "%s: %s\n", backends[i].id, backends[i].label);
         return 2;
     }
-    char *end;
-    unsigned long model = strtoul(argv[2], &end, 10);
-    if (!argv[2][0] || *end || model >= BACKEND_COUNT)
+    unsigned model = 0;
+    while (model < BACKEND_COUNT && strcmp(argv[2], backends[model].id))
+        model++;
+    if (model >= BACKEND_COUNT)
         return 2;
     workspace_init(true, argv[1]);
     network_set_directory(argv[1]);

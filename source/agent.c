@@ -241,7 +241,7 @@ static bool open_session(unsigned number) {
         session = cJSON_CreateObject();
     if (!cJSON_GetObjectItemCaseSensitive(session, "model"))
         cJSON_AddStringToObject(session, "model",
-                                backends[config_get()->default_model].model);
+                                backends[config_get()->default_model].id);
     history = cJSON_GetObjectItemCaseSensitive(session, "history");
     queue = cJSON_GetObjectItemCaseSensitive(session, "queue");
     journal = cJSON_GetObjectItemCaseSensitive(session, "journal");
@@ -280,7 +280,7 @@ static bool open_session(unsigned number) {
     if (!string(session, "network_id")[0]) {
         char identifier[96];
         static unsigned sequence;
-        snprintf(identifier, sizeof(identifier), "ai-dsi-%lx-%lx-%u-%u",
+        snprintf(identifier, sizeof(identifier), "lutin-%lx-%lx-%u-%u",
                  (unsigned long)time(NULL), (unsigned long)clock(), number,
                  ++sequence);
         cJSON_AddStringToObject(session, "network_id", identifier);
@@ -405,9 +405,9 @@ bool agent_reset(void) {
     cJSON_AddArrayToObject(session, "history");
     cJSON_AddArrayToObject(session, "queue");
     cJSON_AddObjectToObject(session, "journal");
-    cJSON_AddStringToObject(session, "model", backends[model].model);
+    cJSON_AddStringToObject(session, "model", backends[model].id);
     char identifier[96];
-    snprintf(identifier, sizeof(identifier), "ai-dsi-reset-%lx-%lx",
+    snprintf(identifier, sizeof(identifier), "lutin-reset-%lx-%lx",
              (unsigned long)time(NULL), (unsigned long)clock());
     cJSON_AddStringToObject(session, "network_id", identifier);
     bind_session();
@@ -657,7 +657,7 @@ bool agent_busy(void) { return active || network_busy(); }
 unsigned agent_model(void) {
     const char *model = string(session, "model");
     for (unsigned i = 0; i < BACKEND_COUNT; i++)
-        if (!strcmp(model, backends[i].model))
+        if (!strcmp(model, backends[i].id))
             return i;
     return config_get()->default_model;
 }
@@ -669,7 +669,7 @@ bool agent_select_model(unsigned index) {
     if (!previous)
         return false;
     cJSON_DeleteItemFromObjectCaseSensitive(session, "model");
-    cJSON_AddStringToObject(session, "model", backends[index].model);
+    cJSON_AddStringToObject(session, "model", backends[index].id);
     /* Encrypted reasoning cannot be transferred between providers. */
     for (int i = cJSON_GetArraySize(history) - 1; i >= 0; i--) {
         cJSON *item = cJSON_GetArrayItem(history, i);

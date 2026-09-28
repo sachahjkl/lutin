@@ -2,14 +2,14 @@
 
 ## Local configuration
 
-`/ai-dsi/config.json` contains optional `default_model`, `tool_details`, and `startup_view` fields.
-The API key lives separately in `/ai-dsi/opencode-key`.
-The CA bundle lives in `/ai-dsi/ca.pem`.
+`/lutin/config.json` contains optional `default_model`, `tool_details`, and `startup_view` fields.
+Provider API keys live separately in `/lutin/keys/<provider-id>`.
+The CA bundle lives in `/lutin/ca.pem`.
 These files are outside the tools' project namespace.
 
 ## Project
 
-A project is a numbered directory under `/ai-dsi/projects/`.
+A project is a numbered directory under `/lutin/projects/`.
 Its flat files include the Lua entry point `main.lua` and session documents.
 Saved creations can run offline.
 Writes use an internal temporary file and backup to recover failed replacement.
@@ -22,7 +22,7 @@ It contains:
 - `history`: ordered conversation items and tool results.
 - `queue`: pending request strings.
 - `journal`: tool-call records indexed by call ID.
-- `model`: the selected service model ID as a string.
+- `model`: the provider-qualified ID, such as `opencode-go/deepseek-v4-flash`.
 - `network_id`: the persistent OpenCode session identifier.
 - `interruptions`: incomplete responses when present.
 

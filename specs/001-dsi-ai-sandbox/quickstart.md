@@ -9,7 +9,7 @@ prek run --all-files
 nix flake check "path:$PWD" --no-write-lock-file
 ```
 
-The build produces `ai-dsi.nds`.
+The build produces `lutin.nds`.
 Automated checks do not use API credentials.
 
 ## Console
@@ -24,10 +24,10 @@ Automated checks do not use API credentials.
 
 ```sh
 nix build .#live-agent -o result-live-agent
-result-live-agent/bin/live-agent /path/to/private-test-directory 3 'Create and run an animation.'
+result-live-agent/bin/live-agent /path/to/private-test-directory opencode-go/deepseek-v4-flash 'Create and run an animation.'
 ```
 
-Place `opencode-key` and `ca.pem` in the private test directory first.
-Index 3 selects DeepSeek V4 Flash. This test consumes your service allowance.
+Place `keys/opencode-go` and `ca.pem` in the private test directory first.
+This test consumes your service allowance.
 Keep the directory outside the repository and Nix store.
 Check for a completed agent turn, a running creation, and no runtime error.

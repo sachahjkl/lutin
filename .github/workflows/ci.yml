@@ -35,7 +35,7 @@ jobs:
         with:
           name: lutin-build
           path: |
-            result-rom/ai-dsi.nds
+            result-rom/lutin.nds
             result-release/
             result-emulator/
           if-no-files-found: error

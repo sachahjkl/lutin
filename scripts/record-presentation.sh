@@ -4,14 +4,18 @@ set -euo pipefail
 rom=$(realpath "${1:?Supply the ROM path.}")
 output=$(realpath -m "${2:?Supply the output directory.}")
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+fixtures=${3:-$root/tests/presentation}
+config=${4:-$root/tests/melonds.toml}
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
-mkdir -p "$output" "$work/sd/ai-dsi/projects/1" "$work/config/melonDS" "$work/runtime"
+mkdir -p "$output" "$work/sd/lutin/projects/1" "$work/config/melonDS" "$work/runtime"
 chmod 700 "$work/runtime"
-cp "$root/examples/animation.lua" "$work/sd/ai-dsi/projects/1/main.lua"
-cp "$rom" "$work/ai-dsi.nds"
-chmod u+w "$work/ai-dsi.nds"
-cp "$root/tests/melonds.toml" "$work/config/melonDS/melonDS.toml"
+cp "$fixtures/session.json" "$work/sd/lutin/projects/1/session-1.json"
+cp "$fixtures/responses.json" "$work/sd/lutin/replay.json"
+chmod -R u+w "$work/sd"
+cp "$rom" "$work/lutin.nds"
+chmod u+w "$work/lutin.nds"
+cp "$config" "$work/config/melonDS/melonDS.toml"
 chmod u+w "$work/config/melonDS/melonDS.toml"
 cat >>"$work/config/melonDS/melonDS.toml" <<EOF
 
@@ -27,7 +31,7 @@ export HOME="$work" XDG_CONFIG_HOME="$work/config" XDG_RUNTIME_DIR="$work/runtim
 export QT_QPA_PLATFORM=xcb SDL_AUDIODRIVER=dummy
 # The child shell expands the capture paths and display identifier.
 # shellcheck disable=SC2016
-timeout --kill-after=2 40 xvfb-run -a -s '-screen 0 800x1000x24' bash -euo pipefail -c '
+timeout --kill-after=2 65 xvfb-run -a -s '-screen 0 800x1000x24' bash -euo pipefail -c '
   output=$1
   press() {
     for key in "$@"; do
@@ -40,26 +44,41 @@ timeout --kill-after=2 40 xvfb-run -a -s '-screen 0 800x1000x24' bash -euo pipef
   melonDS "$2" > "$output/emulator.log" 2>&1 &
   emulator=$!
   trap '\''kill -KILL "$emulator" 2>/dev/null || true; wait "$emulator" 2>/dev/null || true'\'' EXIT
-  window=$(timeout 15 xdotool search --sync --onlyvisible --name "melonDS" | head -n 1)
+  window=$(timeout 15 xdotool search --sync --onlyvisible --name "melonDS" | head -n 1) || {
+    cat "$output/emulator.log"
+    exit 1
+  }
   sleep 4
   xdotool windowsize "$window" 512 800
   xdotool windowmove "$window" 0 0
   xdotool windowfocus "$window"
   sleep 1
   ffmpeg -hide_banner -loglevel error -y -f x11grab -framerate 15 -video_size 512x800 -i "$DISPLAY+0,0" \
-    -t 18 -c:v libx264 -preset fast -crf 30 -pix_fmt yuv420p -movflags +faststart "$output/presentation.mp4" &
+    -t 40 -c:v libx264 -preset fast -crf 26 -pix_fmt yuv420p -movflags +faststart "$output/presentation.mp4" &
   recorder=$!
   sleep 2
   press Return
-  sleep 1
-  press Down Down Down Down Down a
-  sleep 5
-  press Return
-  press Down Down Down Down a
+  press Down Down Down a
   sleep 2
-  press x
+  press a
+  press Return
+  press Up Up a
+  sleep 21
+  magick import -window "$window" "$output/session.png"
+  tesseract "$output/session.png" "$output/session" -l eng --psm 6 2> "$output/ocr.log"
+  cat "$output/session.txt"
+  grep -Eiq "HELLO|PRESENTATION" "$output/session.txt"
+  grep -Eq "RUN" "$output/session.txt"
+  grep -Eiq "Agent done" "$output/session.txt"
+  press Return Down a
+  xdotool keydown Right
+  sleep 1
+  xdotool keyup Right
+  xdotool keydown Left
+  sleep 1
+  xdotool keyup Left
   wait "$recorder"
   ffmpeg -hide_banner -loglevel error -y -i "$output/presentation.mp4" \
     -vf "fps=5,scale=256:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=48[p];[b][p]paletteuse=dither=bayer" \
     "$output/presentation.gif"
-' record-presentation "$output" "$work/ai-dsi.nds"
+' record-presentation "$output" "$work/lutin.nds"

@@ -36,16 +36,16 @@ DSi interface → agent → protocol adapter → HTTPS → OpenCode Go
 | -------------- | ---------------------------------------------------------------- |
 | Console SDK    | BlocksDS/libnds and DSWiFi.                                      |
 | Network        | libcurl with Mbed TLS and certificate verification.              |
-| Service        | OpenCode Go directly. No personal endpoint.                      |
+| Service        | Provider registry; OpenCode Go is the bundled provider.          |
 | Default model  | GPT 6 Luna. DeepSeek V4 Flash uses Chat Completions.             |
-| Credentials    | `/ai-dsi/opencode-key`, loaded at runtime.                       |
-| Configuration  | `/ai-dsi/config.json`, strict validation with atomic rejection.  |
+| Credentials    | `/lutin/keys/<provider-id>`, loaded at runtime.                  |
+| Configuration  | `/lutin/config.json`, strict validation with atomic rejection.   |
 | Language       | Lua 5.4.9, separate creation and Code Mode states.               |
 | Rendering      | RAM framebuffer and terminal maps, copied to VRAM at VBlank.     |
 | Scheduling     | Cooperative VBlank waits keep the DSWiFi receive thread active.  |
 | Input          | VBlank sampling retains press edges until main-loop consumption. |
 | Persistence    | Flat project files and one JSON document per session.            |
-| Model identity | Persist the model string, not its menu position.                 |
+| Model identity | Persist the provider-qualified `provider/model` ID.              |
 | Publication    | MIT, English documentation, local logo and presentation assets.  |
 
 ## Interface

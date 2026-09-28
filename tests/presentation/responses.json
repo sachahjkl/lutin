@@ -1,0 +1,95 @@
+[
+  [
+    {
+      "type": "function_call",
+      "call_id": "call_6149fc64114c4e35b07f8bae",
+      "name": "read_file",
+      "arguments": { "path": "main.lua", "offset": 0, "limit": 4096 }
+    }
+  ],
+  [
+    {
+      "type": "message",
+      "role": "assistant",
+      "content": [
+        { "type": "output_text", "text": "Now I'll write the file.\n\n" }
+      ]
+    },
+    {
+      "type": "function_call",
+      "call_id": "call_be67638d3f074d6e88ed5e6e",
+      "name": "write_file",
+      "arguments": {
+        "path": "main.lua",
+        "text": "local x=20\nfunction init() end\nfunction update(dt)\n  local h=ds.buttons()\n  if h&left>0 then x=x-80*dt end\n  if h&right>0 then x=x+80*dt end\n  x=math.max(0,math.min(216,x))\nend\nfunction draw()\n  ds.clear(0x001040)\n  ds.text(78,60,\"HELLO, PRESENTATION!\",0xFFFFFF)\n  ds.rect(math.floor(x),100,40,40,0x00FFFF)\nend",
+        "expected_version": "missing",
+        "append": false
+      }
+    }
+  ],
+  [
+    {
+      "type": "function_call",
+      "call_id": "call_8d166dafa3fc4e5b9acb702f",
+      "name": "run_program",
+      "arguments": { "path": "main.lua" }
+    }
+  ],
+  [
+    {
+      "type": "function_call",
+      "call_id": "call_fdb0b0ff540c4c94918d1219",
+      "name": "inspect_runtime",
+      "arguments": {}
+    }
+  ],
+  [
+    {
+      "type": "function_call",
+      "call_id": "call_46ad08eca2a94ec897e06ca9",
+      "name": "read_file",
+      "arguments": { "path": "main.lua", "offset": 0, "limit": 4096 }
+    }
+  ],
+  [
+    {
+      "type": "function_call",
+      "call_id": "call_9af396cff6234ce28363baa2",
+      "name": "patch_file",
+      "arguments": {
+        "path": "main.lua",
+        "expected_version": "fa641c57",
+        "old_text": "local h=ds.buttons()\n  if h&left>0 then x=x-80*dt end\n  if h&right>0 then x=x+80*dt end",
+        "new_text": "local h=ds.buttons()\n  if h&32>0 then x=x-80*dt end\n  if h&16>0 then x=x+80*dt end"
+      }
+    }
+  ],
+  [
+    {
+      "type": "function_call",
+      "call_id": "call_16c5950820b44b1e947fa5b9",
+      "name": "run_program",
+      "arguments": { "path": "main.lua" }
+    }
+  ],
+  [
+    {
+      "type": "function_call",
+      "call_id": "call_5e7007e6428f4a5182b829d9",
+      "name": "inspect_runtime",
+      "arguments": {}
+    }
+  ],
+  [
+    {
+      "type": "message",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "Done. main.lua (310 bytes) runs cleanly: white \"HELLO, PRESENTATION!\" text on dark blue background, with a cyan square moved by the D-pad (left/right) and clamped to the screen."
+        }
+      ]
+    }
+  ]
+]

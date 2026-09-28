@@ -1,0 +1,8 @@
+{
+  "history": [],
+  "queue": [
+    "Create a small presentation program in main.lua. Display HELLO, PRESENTATION! in white text on a dark blue background, with a cyan square that moves left and right using the D-pad. Keep it under 1200 bytes. Read the file first, write it, run it, and inspect the runtime. Use the explicit JSON tools."
+  ],
+  "journal": {},
+  "model": "opencode-go/deepseek-v4-flash"
+}

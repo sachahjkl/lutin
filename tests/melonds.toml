@@ -20,6 +20,8 @@ Select = 83
 Start = 16777220
 Up = 16777235
 Down = 16777237
+Left = 16777234
+Right = 16777236
 
 [Instance0.Window0]
 IntegerScaling = true

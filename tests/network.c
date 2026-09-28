@@ -21,12 +21,13 @@ void Wifi_AutoConnect(void) { attempts++; }
 int Wifi_AssocStatus(void) { return ASSOCSTATUS_CANNOTCONNECT; }
 
 int main(void) {
-    assert(mkdir("keys", 0700) == 0);
-    network_set_directory("keys");
+    assert(mkdir("credentials", 0700) == 0);
+    assert(mkdir("credentials/keys", 0700) == 0);
+    network_set_directory("credentials");
     network_set_backend(0, "test-session");
     assert(!network_start("{}", NULL));
-    assert(strstr(network_status(), "opencode-key"));
-    FILE *file = fopen("keys/opencode-key", "wb");
+    assert(strstr(network_status(), "keys/opencode-go"));
+    FILE *file = fopen("credentials/keys/opencode-go", "wb");
     assert(file && fputs("test-key\n", file) >= 0 && fclose(file) == 0);
     assert(network_start("{}", NULL));
     assert(!strcmp(network_wifi(), "JOIN"));

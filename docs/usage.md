@@ -5,9 +5,9 @@
 1. Prepare the console with the [installation guide](install-dsi.md).
 2. Configure Wi-Fi in the DSi system settings.
 3. Set the correct console date and time.
-4. Save your OpenCode Go key as plain text in `/ai-dsi/opencode-key`.
-5. Keep the supplied CA bundle at `/ai-dsi/ca.pem`.
-6. Launch `/roms/nds/ai-dsi.nds` in DSi mode.
+4. Save your OpenCode Go key as plain text in `/lutin/keys/opencode-go`.
+5. Keep the supplied CA bundle at `/lutin/ca.pem`.
+6. Launch `/roms/nds/lutin.nds` in DSi mode.
 
 The key file contains only the key, without quotes or a `Bearer` prefix.
 Lutin validates the server certificate and hostname.
@@ -16,18 +16,19 @@ Model changes pause the agent and retain Queue.
 
 ## Configuration
 
-Lutin reads `/ai-dsi/config.json` at startup:
+Lutin reads `/lutin/config.json` at startup:
 
 ```json
 {
-  "default_model": "gpt-6-luna",
+  "default_model": "opencode-go/gpt-6-luna",
   "tool_details": false,
   "startup_view": "keyboard"
 }
 ```
 
 All keys are optional. These are the defaults.
-`default_model` accepts `gpt-6-luna`, `gpt-5.6-luna`, `grok-4.6`, or `deepseek-v4-flash`.
+`default_model` uses a `provider/model` identifier.
+The bundled IDs are `opencode-go/gpt-6-luna`, `opencode-go/gpt-5.6-luna`, `opencode-go/grok-4.6`, and `opencode-go/deepseek-v4-flash`.
 A session's saved model takes priority.
 `startup_view` accepts `keyboard` or `sessions`.
 `tool_details` expands tool arguments and results in the chat.
@@ -35,7 +36,7 @@ A session's saved model takes priority.
 Restart Lutin after editing the file. Interface changes do not rewrite this file.
 Unknown, duplicate, or invalid keys reject the entire configuration.
 Lutin then displays a diagnostic and uses defaults.
-The file must contain fewer than 4,096 bytes. Credentials remain in `opencode-key`.
+The file must contain fewer than 4,096 bytes. Credentials live in `/lutin/keys/<provider-id>`.
 
 ## Screens and controls
 
@@ -97,10 +98,9 @@ Switching sessions interrupts the active generation and retains saved results.
 Reset clears the conversation, Queue, and tool journal, but retains the selected model.
 Reset and delete preserve project files and the running creation.
 
-The interface exposes eight projects under `/ai-dsi/projects/1/` through `/ai-dsi/projects/8/`.
+The interface exposes eight projects under `/lutin/projects/1/` through `/lutin/projects/8/`.
 Each project contains Lua files and `session-N.json` journals.
-Sessions store the model ID as text, so model-list ordering does not determine the saved selection.
-Sessions from the earlier numeric-model format use the configured default until a model is selected again.
+Sessions store the provider-qualified model ID, so names from different providers cannot collide.
 
 ## Queue and Steer
 
@@ -239,11 +239,11 @@ Physical power-loss recovery on FAT remains a hardware validation task.
 
 ```sh
 nix build .#live-agent -o result-live-agent
-result-live-agent/bin/live-agent /path/to/private-test-directory 3 'Create and run an animation.'
+result-live-agent/bin/live-agent /path/to/private-test-directory opencode-go/deepseek-v4-flash 'Create and run an animation.'
 ```
 
-Place `opencode-key` and `ca.pem` in that directory first.
-Index 3 selects DeepSeek V4 Flash. Index 0 selects GPT 6 Luna.
+Place `keys/opencode-go` and `ca.pem` in that directory first.
+The model argument uses the same provider-qualified ID as configuration and sessions.
 The harness uses the real agent, tools, runtime, and HTTPS modules with host networking.
 It writes project files and `result.ppm`. Success requires a completed turn with a running creation.
 Keep the test directory outside the repository and Nix store.

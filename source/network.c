@@ -16,8 +16,13 @@ static CURLM *multi;
 static struct curl_slist *headers;
 static struct curl_slist *resolved_hosts;
 static bool resolving;
-enum { NETWORK_CONNECT_SECONDS = 60, NETWORK_PORT_BYTES = 6 };
+enum {
+    NETWORK_CONNECT_SECONDS = 60,
+    NETWORK_PORT_BYTES = 6,
+    NETWORK_STATUS_BYTES = 512
+};
 static char request_host[RESOLVER_HOST_BYTES], request_port[NETWORK_PORT_BYTES];
+static char request_address[RESOLVER_ADDRESS_BYTES];
 static bool initialized;
 static bool connecting;
 typedef enum {
@@ -40,7 +45,7 @@ static SseParser parser;
 static char error_body[4096];
 static size_t received;
 static bool local_error;
-static char status[CURL_ERROR_SIZE] = "Network idle";
+static char status[NETWORK_STATUS_BYTES] = "Network idle";
 static char token_path[256];
 static char request_url[256];
 static char ca_path[256] = "/lutin/ca.pem";
@@ -172,6 +177,7 @@ static bool begin_connection(void) {
         return false;
     }
     error_body[0] = 0;
+    request_address[0] = 0;
     received = 0;
     local_error = false;
     started = last_data = time(NULL);
@@ -388,6 +394,8 @@ void network_tick(void) {
         char entry[RESOLVER_HOST_BYTES + NETWORK_PORT_BYTES +
                    RESOLVER_ADDRESS_BYTES + sizeof("::[]")];
         bool ipv6 = strchr(result.address, ':') != NULL;
+        snprintf(request_address, sizeof(request_address), "%s",
+                 result.address);
         snprintf(entry, sizeof(entry), "%s:%s:%s%s%s", request_host,
                  request_port, ipv6 ? "[" : "", result.address,
                  ipv6 ? "]" : "");
@@ -448,11 +456,17 @@ void network_tick(void) {
         if (message->data.result == CURLE_OPERATION_TIMEDOUT)
             snprintf(status, sizeof(status), "%s timeout after %lds (%uB)",
                      label, (long)(now - started), (unsigned)received);
-        else if (message->data.result != CURLE_OK)
-            snprintf(status, sizeof(status), "%s",
-                     curl_error[0] ? curl_error
-                                   : curl_easy_strerror(message->data.result));
-        else if (http >= 400) {
+        else if (message->data.result != CURLE_OK) {
+            long socket_error = 0;
+            curl_easy_getinfo(request, CURLINFO_OS_ERRNO, &socket_error);
+            snprintf(
+                status, sizeof(status), "%s: curl %d, OS %ld (%s)\nIP: %s\n%s",
+                label, (int)message->data.result, socket_error,
+                socket_error ? strerror((int)socket_error) : "not reported",
+                request_address[0] ? request_address : "not resolved",
+                curl_error[0] ? curl_error
+                              : curl_easy_strerror(message->data.result));
+        } else if (http >= 400) {
             response_error(status, sizeof(status), http, error_body);
         } else if (downloading_catalog) {
             catalog_updated =

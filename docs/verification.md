@@ -74,6 +74,11 @@ A control run with the v0.5.2 network implementation fails the cancellation asse
 It leaves **WiFi:ON** and **Connecting to Wi-Fi...** on screen after B is pressed.
 The patched host harness also downloaded the published catalog over verified HTTPS without an API key.
 
+The `socket-emulator` check initializes the real DS network stack and exercises libcurl socket allocation and cleanup.
+It injects connection refusal and unreachable-network errors across 24 attempts.
+It verifies that diagnostics retain the socket error and resolved destination address.
+This tests repeated failed connection setup, not successful TLS teardown or physical Wi-Fi reliability.
+
 ## Authenticated host inference, 2026-09-28
 
 DeepSeek V4 Flash generated an animation through the real host agent harness.

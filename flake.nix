@@ -65,7 +65,7 @@
     };
     rom = pkgs.blocksdsNix.stdenvBlocksdsSlim.mkDerivation {
       pname = "lutin";
-      version = "0.5.3";
+      version = "0.5.4";
       src = source;
       nativeBuildInputs = [pkgs.gnumake];
       LUA_SOURCE = luaSource;
@@ -227,6 +227,22 @@
       } ''
         bash ${./scripts/check-network-emulator.sh} ${networkStallRom}/lutin.nds "$out" ${./tests/melonds.toml} ${./tests/catalog.json}
       '';
+    socketTestRom = rom.overrideAttrs (_: {
+      pname = "lutin-network-sockets";
+      src = pkgs.lib.fileset.toSource {
+        root = ./.;
+        fileset = pkgs.lib.fileset.unions [./Makefile ./source ./tests/network-sockets.c];
+      };
+      postPatch = "cp tests/network-sockets.c source/main.c";
+      LDFLAGS = "-Wl,--wrap=Wifi_AssocStatus,--wrap=getaddrinfo,--wrap=connect";
+    });
+    socketEmulatorCheck =
+      pkgs.runCommand "lutin-socket-emulator-check" {
+        nativeBuildInputs = emulatorTools;
+        FONTCONFIG_FILE = pkgs.makeFontsConf {fontDirectories = [pkgs.dejavu_fonts];};
+      } ''
+        bash ${./scripts/check-sockets-emulator.sh} ${socketTestRom}/lutin.nds "$out" ${./tests/melonds.toml}
+      '';
     presentationCheck =
       pkgs.runCommand "lutin-presentation-check" {
         nativeBuildInputs = emulatorTools ++ [pkgs.ffmpeg-full];
@@ -336,6 +352,7 @@
       sd-format-linux = sdFormatLinux;
       emulator = emulatorCheck;
       network-emulator = networkEmulatorCheck;
+      socket-emulator = socketEmulatorCheck;
       pre-commit = preCommitCheck;
       runtime = runtimeCheck;
       agent = agentCheck;

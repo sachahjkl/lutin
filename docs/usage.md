@@ -128,6 +128,8 @@ Stop program ends the creation without clearing the session.
 Open **START → Diagnostics** to read the full saved network error.
 Left/Right switches between network, agent, program, and interface diagnostics.
 The compact status area above the conversation shows only the first two lines.
+Transport failure diagnostics include the libcurl code, operating-system error, and resolved destination IP.
+An operating-system error of zero means libcurl did not report that detail.
 
 WiFi shows OFF before initialization, JOIN during association, ON when connected, or DOWN after disconnection.
 Association retries at most three times, with five-second delays.
@@ -142,6 +144,7 @@ During DNS lookup, use **START → Stop agent** to cancel inference or **B** to 
 The interface remains active while DNS waits.
 A cancelled lookup finishes in its worker before another lookup starts.
 If a new request reports **DNS worker unavailable**, wait for that lookup to finish before retrying.
+If the underlying lookup never returns, restart Lutin; cancellation does not terminate the system resolver.
 TLS computation and filesystem operations can still delay interface input.
 
 ## Creation API

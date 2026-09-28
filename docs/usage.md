@@ -137,7 +137,7 @@ START → Stop agent cancels the request when control returns to the main loop.
 
 ## Creation API
 
-Dynamic projects and the sprite/audio APIs below require a source build after `v0.3.0`.
+Dynamic projects and the sprite/audio APIs below are available from `v0.4.0`.
 See [Sprites and audio](assets.md) for asset formats, generation examples, and playback limits.
 
 A program defines optional `init()`, `update(dt)`, and `draw()` functions.

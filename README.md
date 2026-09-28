@@ -37,7 +37,7 @@ Saved programs also work offline. Lutin supports games, animations, drawing tool
 
 ## Compatibility
 
-Dynamic projects and generated assets currently require a source build after `v0.3.0`.
+Dynamic projects and generated assets are available from `v0.4.0`.
 
 | Component  | Current support                                                                             |
 | ---------- | ------------------------------------------------------------------------------------------- |

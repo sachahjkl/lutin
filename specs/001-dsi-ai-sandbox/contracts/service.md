@@ -16,7 +16,7 @@ Credential filenames use the provider ID, so separate providers never share an i
 | `grok-4.6`          | Responses        | `https://opencode.ai/zen/go/v1/responses`        |
 | `deepseek-v4-flash` | Chat Completions | `https://opencode.ai/zen/go/v1/chat/completions` |
 
-Requests send `Authorization: Bearer …`, `User-Agent: Lutin/0.3`, and `x-opencode-session`.
+Requests send `Authorization: Bearer …`, `User-Agent: Lutin/0.4`, and `x-opencode-session`.
 The session identifier persists on SD.
 Responses use function tools and Server-Sent Events, abbreviated SSE.
 The adapter retains DeepSeek reasoning content needed for subsequent tool turns.

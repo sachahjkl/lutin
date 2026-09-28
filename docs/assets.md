@@ -1,6 +1,6 @@
 # Sprites and audio
 
-These APIs require a source build after `v0.3.0`.
+These APIs are available from `v0.4.0`.
 The coding agent generates assets through the existing versioned file tools.
 Assets are editable Lua text, stored beside `main.lua` in the project.
 The same model creates pixel art, animation frames, melodies, and sound effects.

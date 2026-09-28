@@ -1,10 +1,17 @@
-<p align="center">
+<div align="center">
   <img src=".project/image.png" alt="Lutin: a smiling handheld console with a terminal" width="240">
-</p>
 
 # Lutin
 
 **An AI coding agent for Nintendo DSi.**
+
+[![Release](https://img.shields.io/github/v/release/sachahjkl/lutin?style=for-the-badge&color=37865c)](https://github.com/sachahjkl/lutin/releases/latest)
+[![CI](https://img.shields.io/github/actions/workflow/status/sachahjkl/lutin/ci.yml?branch=main&style=for-the-badge)](https://github.com/sachahjkl/lutin/actions/workflows/ci.yml)
+[![MIT](https://img.shields.io/badge/license-MIT-37865c?style=for-the-badge)](LICENSE)
+
+[Website](https://sachahjkl.github.io/lutin/) · [Download](https://github.com/sachahjkl/lutin/releases/latest) · [Install](#installation) · [User guide](docs/usage.md) · [Contribute](CONTRIBUTING.md)
+
+</div>
 
 Lutin writes and runs Lua programs on the console, reads runtime errors, and edits the files in response to your requests.
 
@@ -216,7 +223,7 @@ See [verification evidence](docs/verification.md) and [contribution instructions
 
 ## Current limits
 
-- Creations use a 256 × 192 framebuffer, shapes, and ASCII text. Audio and sprites are not implemented.
+- Creations use a 256 × 192 framebuffer, shapes, ASCII text, pixel sprites, and synthesized audio. See [asset APIs](docs/assets.md).
 - Lua creation memory is limited to 2 MiB. Code Mode uses at most 512 KiB.
 - Project text files are limited to 32 KiB. Serialized sessions are limited to 192 KiB.
 - Projects and sessions are created on demand and listed in bounded pages.

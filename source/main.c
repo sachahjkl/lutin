@@ -41,7 +41,8 @@ typedef enum {
     MODELS,
     SESSIONS,
     PROJECTS,
-    DIAGNOSTICS
+    DIAGNOSTICS,
+    CATALOG
 } View;
 typedef enum {
     MENU_KEYBOARD,
@@ -70,6 +71,7 @@ static unsigned model_index;
 enum { MODEL_PAGE_SIZE = 12 };
 static bool catalog_updating;
 static unsigned diagnostic_index;
+enum { DIAGNOSTIC_INTERFACE = 3 };
 static const char *diagnostic_names[] = {"Network", "Agent", "Program",
                                          "Interface"};
 #define DIAGNOSTIC_COUNT (sizeof(diagnostic_names) / sizeof(*diagnostic_names))
@@ -237,6 +239,7 @@ static bool action(MenuAction index) {
                 } else
                     snprintf(message, sizeof(message), "%s", catalog_error());
             } else {
+                view = CATALOG;
                 catalog_updating = network_update_catalog();
                 snprintf(message, sizeof(message), "%s", network_status());
             }
@@ -318,6 +321,12 @@ static void render_bottom(void) {
         consoleSetColor(&bottom_console, CONSOLE_LIGHT_GRAY);
         consolePrintString(
             "\nTouch an item to select.\nDraft is kept when switching.\n");
+    } else if (view == CATALOG) {
+        consolePrintString("MODEL CATALOG\n\n");
+        consoleSetColor(&bottom_console, CONSOLE_LIGHT_GRAY);
+        consolePrintString(catalog_updating ? "B Cancel update\n\n"
+                                            : "START Menu\n\n");
+        page_text(network_status(), 18);
     } else if (view == COMPOSE) {
         printf("%s | ENTER Send\n", editing_queue >= 0 ? "EDIT QUEUE"
                                     : steer            ? "STEER"
@@ -460,9 +469,15 @@ int main(void) {
         unsigned pressed = sample.pressed, held = sample.held;
         touchPosition touch = {.px = sample.touch_x, .py = sample.touch_y};
         bool menu_input = modal || (pressed & KEY_START);
+        bool catalog_was_updating = catalog_updating;
         if (catalog_updating) {
-            if (pressed & KEY_B)
+            if (pressed & KEY_B) {
                 network_stop();
+                catalog_updating = false;
+                snprintf(message, sizeof(message), "Catalog update cancelled");
+                view = DIAGNOSTICS;
+                diagnostic_index = DIAGNOSTIC_INTERFACE;
+            }
         } else if (pressed & KEY_START) {
             modal = !modal;
             layout();
@@ -642,7 +657,9 @@ int main(void) {
                                      touch.px, touch.py,
                                      (game.held & KEY_TOUCH) != 0});
         if (catalog_updating) {
-            network_tick();
+            /* Present the update screen before the first network call. */
+            if (catalog_was_updating)
+                network_tick();
             snprintf(message, sizeof(message), "%s", network_status());
             if (!network_busy()) {
                 catalog_updating = false;
@@ -652,9 +669,7 @@ int main(void) {
                     if (config_error()[0])
                         snprintf(message, sizeof(message), "%s",
                                  config_error());
-                } else if (pressed & KEY_B)
-                    snprintf(message, sizeof(message),
-                             "Catalog update cancelled");
+                }
             }
         } else if (editing_queue < 0 && !pressed)
             agent_tick();

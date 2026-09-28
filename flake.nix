@@ -65,7 +65,7 @@
     };
     rom = pkgs.blocksdsNix.stdenvBlocksdsSlim.mkDerivation {
       pname = "lutin";
-      version = "0.4.0";
+      version = "0.5.0";
       src = source;
       nativeBuildInputs = [pkgs.gnumake];
       LUA_SOURCE = luaSource;

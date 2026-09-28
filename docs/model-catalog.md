@@ -1,6 +1,6 @@
 # Model catalog
 
-This feature is available in source builds after v0.4.0.
+This feature is available from v0.5.0.
 
 Lutin reads `/lutin/models.json` from SD. The ROM contains no provider or model list.
 The SD kit supplies the compact catalog built from models.dev and verified transport routes.

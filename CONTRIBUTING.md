@@ -53,5 +53,5 @@ Release notes come from `docs/releases/TAG.md` when present.
 To build those assets locally:
 
 ```sh
-nix develop --command bash scripts/package-release.sh dist v0.4.0
+nix develop --command bash scripts/package-release.sh dist v0.5.0
 ```

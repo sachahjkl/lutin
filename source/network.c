@@ -307,7 +307,7 @@ void network_tick(void) {
         curl_easy_setopt(request, CURLOPT_SSL_VERIFYPEER, 1L);
         curl_easy_setopt(request, CURLOPT_SSL_VERIFYHOST, 2L);
         curl_easy_setopt(request, CURLOPT_WRITEFUNCTION, receive);
-        curl_easy_setopt(request, CURLOPT_USERAGENT, "Lutin/0.4");
+        curl_easy_setopt(request, CURLOPT_USERAGENT, "Lutin/0.5");
         curl_easy_setopt(request, CURLOPT_CONNECTTIMEOUT, 60L);
         curl_easy_setopt(request, CURLOPT_TIMEOUT, 600L);
         curl_easy_setopt(request, CURLOPT_NOSIGNAL, 1L);

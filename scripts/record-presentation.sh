@@ -29,9 +29,10 @@ FolderPath = "$work/sd"
 EOF
 export HOME="$work" XDG_CONFIG_HOME="$work/config" XDG_RUNTIME_DIR="$work/runtime"
 export QT_QPA_PLATFORM=xcb SDL_AUDIODRIVER=dummy
+export OMP_THREAD_LIMIT=1
 # The child shell expands the capture paths and display identifier.
 # shellcheck disable=SC2016
-timeout --kill-after=2 65 xvfb-run -a -s '-screen 0 800x1000x24' bash -euo pipefail -c '
+timeout --kill-after=2 120 xvfb-run -a -s '-screen 0 800x1000x24' bash -euo pipefail -c '
   output=$1
   press() {
     for key in "$@"; do
@@ -54,7 +55,7 @@ timeout --kill-after=2 65 xvfb-run -a -s '-screen 0 800x1000x24' bash -euo pipef
   xdotool windowfocus "$window"
   sleep 1
   ffmpeg -hide_banner -loglevel error -y -f x11grab -framerate 15 -video_size 512x800 -i "$DISPLAY+0,0" \
-    -t 40 -c:v libx264 -preset fast -crf 26 -pix_fmt yuv420p -movflags +faststart "$output/presentation.mp4" &
+    -t 40 -c:v libx264 -threads 2 -preset fast -crf 26 -pix_fmt yuv420p -movflags +faststart "$output/presentation.mp4" &
   recorder=$!
   sleep 2
   press Return

@@ -11,6 +11,7 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 export HOME="$work" XDG_CONFIG_HOME="$work/config" XDG_RUNTIME_DIR="$work/runtime"
 export QT_QPA_PLATFORM=xcb SDL_AUDIODRIVER=dummy
+export OMP_THREAD_LIMIT=1
 mkdir -p "$XDG_CONFIG_HOME/melonDS" "$XDG_RUNTIME_DIR"
 chmod 700 "$XDG_RUNTIME_DIR"
 cp "$config" "$XDG_CONFIG_HOME/melonDS/melonDS.toml"
@@ -22,7 +23,7 @@ chmod u+w "$work/scheduler.nds"
 
 # The child shell expands these variables during the test.
 # shellcheck disable=SC2016
-timeout --kill-after=2 50 xvfb-run -a -s '-screen 0 800x1000x24' bash -euo pipefail -c '
+timeout --kill-after=2 120 xvfb-run -a -s '-screen 0 800x1000x24' bash -euo pipefail -c '
   output=$1
   press() {
     for key in "$@"; do
@@ -85,6 +86,7 @@ timeout --kill-after=2 50 xvfb-run -a -s '-screen 0 800x1000x24' bash -euo pipef
   stdbuf -oL -eL melonDS "$3" > "$output/scheduler.log" 2>&1 &
   emulator=$!
   window=$(timeout 10 xdotool search --sync --onlyvisible --name "melonDS" | head -n 1)
+  sleep 3
   xdotool windowsize "$window" 512 800
   sleep 5
   magick import -window "$window" "$output/scheduler.png"

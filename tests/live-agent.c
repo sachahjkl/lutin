@@ -22,6 +22,7 @@ int main(int argc, char **argv) {
     if (model >= BACKEND_COUNT)
         return 2;
     workspace_init(true, argv[1]);
+    runtime_set_asset_reader(workspace_read);
     network_set_directory(argv[1]);
     if (!agent_open(1) || !agent_select_model((unsigned)model) ||
         !agent_submit(argv[3], false)) {

@@ -116,3 +116,21 @@ Nix verifies the pinned downloads in `nix/installation-sources.json`.
 The kit contains TWiLight Menu++ v27.24.1, Safe Unlaunch installer v2.6, dumpTool v1.0, Memory Pit, dsibiosdumper, and sdFormatLinux v0.2.0.
 It also contains the current ROM, starter animation, configuration example, and public CA bundle.
 It contains no API key or console dump.
+
+## Project discovery and media
+
+Workspace tests create more than twelve projects and open project 1234.
+They verify sorted pagination and rejection of non-directory entries and noncanonical identifiers.
+Runtime tests verify sprite transparency, clipping, scaling, flipping, and malformed assets.
+Audio tests verify note timing, rests, looping, voice constraints, and cleanup.
+They also verify that a rejected program replacement preserves active audio.
+The `media` check loads the bundled Lua assets through the real workspace reader.
+It renders animation and checks music/effect events through a host audio callback.
+Physical-console sprite controls and audible output remain unverified.
+
+## Published release
+
+Release `v0.3.0` passed GitHub CI and published the ROM, SD ZIP, and `SHA256SUMS`.
+Downloaded checksums passed. The CI ROM matched the local ROM byte-for-byte.
+Its ROM SHA-256 is `68280b69d71e430cd5ad9650ec66a47c5d204b9be3369f69b9d6764dd24e77e6`.
+Dynamic projects and media APIs are later source changes.

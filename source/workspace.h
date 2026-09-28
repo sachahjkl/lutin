@@ -4,6 +4,9 @@
 #include <stddef.h>
 void workspace_init(bool available, const char *base);
 bool workspace_select(unsigned project);
+bool workspace_projects(unsigned after, unsigned *items, unsigned capacity,
+                        unsigned *count);
+bool workspace_create(unsigned *project);
 const char *workspace_root(void);
 char *workspace_read(const char *path, size_t limit);
 bool workspace_load_entry(char *output, size_t capacity, const char *demo);

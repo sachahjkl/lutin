@@ -30,11 +30,14 @@ Saved programs also work offline. Lutin supports games, animations, drawing tool
 - **Persistent sessions:** create, switch, reset, and delete sessions stored on SD.
 - **Steer and Queue:** redirect the current task or save requests for later.
 - **Local execution:** draw shapes and text, read buttons and touch input, and inspect Lua errors.
+- **Generated assets:** editable pixel sprites, animation frames, synthesized music, and sound effects. See [asset APIs](docs/assets.md).
 - **Input capture:** sample buttons at VBlank and retain short presses across a busy main-loop iteration.
 - **Visible progress:** Wi-Fi state, transport stage, elapsed time, and received bytes.
 - **Reproducible builds:** a pinned Nix environment, sanitizer tests, and emulator checks.
 
 ## Compatibility
+
+Dynamic projects and generated assets currently require a source build after `v0.3.0`.
 
 | Component  | Current support                                                                             |
 | ---------- | ------------------------------------------------------------------------------------------- |
@@ -74,12 +77,12 @@ nix build .#installation-kit -o result-installation
 
 The source-built kit uses these paths:
 
-| Build output                                            | SD destination                                            |
-| ------------------------------------------------------- | --------------------------------------------------------- |
-| `result-installation/02-menu/roms/nds/lutin.nds`        | `/roms/nds/lutin.nds`                                     |
-| `result-installation/02-menu/lutin/ca.pem`              | `/lutin/ca.pem`                                           |
-| `result-installation/02-menu/lutin/config.json`         | `/lutin/config.json`                                      |
-| `result-installation/02-menu/lutin/projects/1/main.lua` | `/lutin/projects/1/main.lua` — optional starter animation |
+| Build output                                     | SD destination                                             |
+| ------------------------------------------------ | ---------------------------------------------------------- |
+| `result-installation/02-menu/roms/nds/lutin.nds` | `/roms/nds/lutin.nds`                                      |
+| `result-installation/02-menu/lutin/ca.pem`       | `/lutin/ca.pem`                                            |
+| `result-installation/02-menu/lutin/config.json`  | `/lutin/config.json`                                       |
+| `result-installation/02-menu/lutin/projects/1/`  | `/lutin/projects/1/` — optional starter program and assets |
 
 Do not overwrite an existing project with the starter animation.
 For an update, replace the ROM. Update the CA bundle when needed.
@@ -213,7 +216,7 @@ See [verification evidence](docs/verification.md) and [contribution instructions
 - Creations use a 256 × 192 framebuffer, shapes, and ASCII text. Audio and sprites are not implemented.
 - Lua creation memory is limited to 2 MiB. Code Mode uses at most 512 KiB.
 - Project text files are limited to 32 KiB. Serialized sessions are limited to 192 KiB.
-- The interface exposes eight projects. Sessions are created on demand and listed in pages.
+- Projects and sessions are created on demand and listed in bounded pages.
 - Input capture retains a short press, but it does not make long native operations preemptible.
 - Repeated presses of the same button during one blocked iteration merge into one event.
 - User testing confirms operation on a DSi XL. New input changes still need physical-console validation.

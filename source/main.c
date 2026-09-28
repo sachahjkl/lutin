@@ -4,6 +4,7 @@
 #include "config.h"
 #include "network.h"
 #include "platform.h"
+#include "platform_audio.h"
 #include "platform_input.h"
 #include "runtime.h"
 #include "workspace.h"
@@ -31,7 +32,16 @@ static const char demo[] =
     " ds.rect(0,190,256,2,0xffffff)\n"
     "end\n";
 
-typedef enum { COMPOSE, PREVIEW, PLAY, QUEUE, SOURCE, MODELS, SESSIONS } View;
+typedef enum {
+    COMPOSE,
+    PREVIEW,
+    PLAY,
+    QUEUE,
+    SOURCE,
+    MODELS,
+    SESSIONS,
+    PROJECTS
+} View;
 typedef enum {
     MENU_KEYBOARD,
     MENU_PREVIEW,
@@ -54,6 +64,7 @@ static bool modal, steer;
 static bool tools_expanded;
 static unsigned model_index;
 static unsigned session_items[12], session_count, session_index, session_after;
+static unsigned project_items[12], project_count, project_index, project_after;
 static unsigned menu_index, project = 1, session_number = 1;
 static unsigned chat_scroll, source_scroll, queue_index;
 static int editing_queue = -1;
@@ -63,9 +74,9 @@ static PrintConsole top_console, bottom_console;
 static uint16_t top_map[32 * 32], bottom_map[32 * 32];
 static int program_background;
 static const char *menu_items[] = {
-    "Keyboard",     "Preview",      "Play controls", "Queue",        "Source",
-    "Run program",  "Stop program", "Stop agent",    "Resume queue", "Sessions",
-    "Next project", "Save source",  "Model",         "Tool details", "Quit"};
+    "Keyboard",    "Preview",      "Play controls", "Queue",        "Source",
+    "Run program", "Stop program", "Stop agent",    "Resume queue", "Sessions",
+    "Projects",    "Save source",  "Model",         "Tool details", "Quit"};
 #define MENU_COUNT (sizeof(menu_items) / sizeof(*menu_items))
 
 static bool load(void) {
@@ -86,6 +97,36 @@ static void session_changed(void) {
     message[0] = 0;
     session_after = 0;
     refresh_sessions();
+}
+
+static void refresh_projects(void) {
+    if (!workspace_projects(project_after, project_items, 12, &project_count))
+        snprintf(message, sizeof(message), "%s", workspace_error());
+    project_index = 0;
+}
+
+static void open_project(unsigned selected) {
+    if (agent_busy() || runtime_running()) {
+        snprintf(message, sizeof(message), "Stop agent and program first");
+        return;
+    }
+    if (!agent_close())
+        return;
+    if (!workspace_select(selected)) {
+        snprintf(message, sizeof(message), "%s", workspace_error());
+        return;
+    }
+    unsigned numbers[1], count;
+    if (!agent_sessions(0, numbers, 1, &count) ||
+        !(count ? agent_open(numbers[0]) : agent_create(&numbers[0]))) {
+        workspace_select(project);
+        snprintf(message, sizeof(message), "Cannot open project session");
+        return;
+    }
+    project = selected;
+    session_number = numbers[0];
+    session_changed();
+    load();
 }
 
 static void page_text(const char *text, unsigned rows) {
@@ -142,20 +183,9 @@ static bool action(MenuAction index) {
         session_after = 0;
         refresh_sessions();
     } else if (index == MENU_PROJECT) {
-        if (agent_busy() || runtime_running()) {
-            snprintf(message, sizeof(message), "Stop agent and program first");
-        } else if (agent_close()) {
-            unsigned next = project % 8 + 1;
-            if (workspace_select(next)) {
-                project = next;
-                editing_queue = -1;
-                session_number = 1;
-                agent_open(session_number);
-                chat_scroll = 0;
-                load();
-            } else
-                snprintf(message, sizeof(message), "%s", workspace_error());
-        }
+        view = PROJECTS;
+        project_after = 0;
+        refresh_projects();
     } else if (index == MENU_SAVE) {
         snprintf(message, sizeof(message), "%s",
                  workspace_write("main.lua", code) ? "Saved main.lua"
@@ -274,6 +304,16 @@ static void render_bottom(void) {
         consoleSetColor(&bottom_console, CONSOLE_LIGHT_GRAY);
         consolePrintString(
             "\n* Current session\nReset/delete keep project files.\n");
+    } else if (view == PROJECTS) {
+        consolePrintString("PROJECTS / A Open  X New\n");
+        consoleSetColor(&bottom_console, CONSOLE_LIGHT_GRAY);
+        consolePrintString(
+            "UP/DOWN Select  RIGHT Next\nLEFT First page  START Menu\n\n");
+        for (unsigned i = 0; i < project_count; i++)
+            printf("%s Project %u%s\n", i == project_index ? ">" : " ",
+                   project_items[i], project_items[i] == project ? " *" : "");
+        if (!project_count)
+            consolePrintString("No projects on this page.\n");
     } else if (view == MODELS) {
         consolePrintString("MODEL / A Select\n");
         consoleSetColor(&bottom_console, CONSOLE_LIGHT_GRAY);
@@ -326,6 +366,9 @@ int main(void) {
     bool storage = fatInitDefault();
     platform_input_init();
     workspace_init(storage, "/lutin");
+    runtime_set_asset_reader(workspace_read);
+    soundEnable();
+    runtime_set_audio(platform_audio);
     config_load("/lutin/config.json");
     tools_expanded = config_get()->tool_details;
     view = config_get()->start_in_sessions ? SESSIONS : COMPOSE;
@@ -459,6 +502,34 @@ int main(void) {
                     session_changed();
                     if (session_count && agent_open(session_items[0]))
                         session_number = session_items[0];
+                }
+            } else if (view == PROJECTS) {
+                if ((pressed & KEY_DOWN) && project_index + 1 < project_count)
+                    project_index++;
+                if ((pressed & KEY_UP) && project_index)
+                    project_index--;
+                if ((pressed & KEY_RIGHT) && project_count) {
+                    project_after = project_items[project_count - 1];
+                    refresh_projects();
+                }
+                if (pressed & KEY_LEFT) {
+                    project_after = 0;
+                    refresh_projects();
+                }
+                if ((pressed & KEY_A) && project_count)
+                    open_project(project_items[project_index]);
+                if (pressed & KEY_X) {
+                    unsigned created;
+                    if (agent_busy() || runtime_running())
+                        snprintf(message, sizeof(message),
+                                 "Stop agent and program first");
+                    else if (workspace_create(&created)) {
+                        open_project(created);
+                        project_after = created - 1;
+                        refresh_projects();
+                    } else
+                        snprintf(message, sizeof(message), "%s",
+                                 workspace_error());
                 }
             } else if (view == MODELS) {
                 if (pressed & KEY_UP)

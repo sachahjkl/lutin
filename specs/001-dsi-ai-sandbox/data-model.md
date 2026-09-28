@@ -10,7 +10,9 @@ These files are outside the tools' project namespace.
 ## Project
 
 A project is a numbered directory under `/lutin/projects/`.
-Its flat files include the Lua entry point `main.lua` and session documents.
+Its flat files include the Lua entry point `main.lua`, Lua assets, and session documents.
+Discovery returns sorted project IDs in bounded pages.
+Creation allocates a new numbered directory without predefined slots.
 Saved creations can run offline.
 Writes use an internal temporary file and backup to recover failed replacement.
 
@@ -64,3 +66,10 @@ stopped → loading → running → stopped
 
 A syntax failure preserves the previously loaded program.
 A callback failure stops the affected creation and retains its diagnostic.
+
+Sprite handles contain dimensions and compiled 15-bit pixels with transparency.
+Sound handles contain a waveform and bounded note sequences.
+Both use the runtime's memory-accounted Lua allocator.
+Four voice slots retain playing sound handles until stopped or replaced.
+Runtime shutdown stops all hardware voices.
+Asset scripts execute in the same sandbox during startup or initialization.

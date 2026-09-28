@@ -1,6 +1,8 @@
 #include "workspace.h"
 #include <ctype.h>
+#include <dirent.h>
 #include <errno.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,7 +11,7 @@
 
 static bool storage;
 static char base_path[80];
-static char root[96];
+static char root[112];
 static char error[96];
 
 static bool file_error(const char *operation) {
@@ -42,7 +44,7 @@ void workspace_init(bool available, const char *base) {
 }
 
 bool workspace_select(unsigned project) {
-    if (!project || project > 99)
+    if (!project)
         return false;
     if (!storage)
         return false;
@@ -63,6 +65,84 @@ bool workspace_select(unsigned project) {
 
 const char *workspace_root(void) { return root; }
 const char *workspace_error(void) { return error; }
+
+bool workspace_projects(unsigned after, unsigned *items, unsigned capacity,
+                        unsigned *count) {
+    *count = 0;
+    if (!storage) {
+        snprintf(error, sizeof(error), "SD card unavailable");
+        return false;
+    }
+    char path[112];
+    snprintf(path, sizeof(path), "%s/projects", base_path);
+    DIR *directory = opendir(path);
+    if (!directory)
+        return file_error("List projects");
+    struct dirent *entry;
+    bool ok = true;
+    while (true) {
+        errno = 0;
+        entry = readdir(directory);
+        if (!entry) {
+            if (errno)
+                ok = file_error("Read projects");
+            break;
+        }
+        const char *name = entry->d_name;
+        if (*name < '1' || *name > '9')
+            continue;
+        unsigned number = 0;
+        const char *digit = name;
+        for (; *digit >= '0' && *digit <= '9'; digit++) {
+            unsigned value = (unsigned)(*digit - '0');
+            if (number > (UINT_MAX - value) / 10)
+                break;
+            number = number * 10 + value;
+        }
+        if (*digit || number <= after)
+            continue;
+        snprintf(path, sizeof(path), "%s/projects/%u", base_path, number);
+        struct stat information;
+        if (stat(path, &information) != 0 || !S_ISDIR(information.st_mode))
+            continue;
+        unsigned position = 0;
+        while (position < *count && items[position] < number)
+            position++;
+        if (position >= capacity)
+            continue;
+        if (*count < capacity)
+            (*count)++;
+        for (unsigned i = *count - 1; i > position; i--)
+            items[i] = items[i - 1];
+        items[position] = number;
+    }
+    closedir(directory);
+    return ok;
+}
+
+bool workspace_create(unsigned *project) {
+    if (!storage) {
+        snprintf(error, sizeof(error), "SD card unavailable");
+        return false;
+    }
+    unsigned items[12], count, last = 0;
+    do {
+        if (!workspace_projects(last, items, 12, &count))
+            return false;
+        if (count)
+            last = items[count - 1];
+    } while (count == 12);
+    if (last == UINT_MAX) {
+        snprintf(error, sizeof(error), "Project identifiers exhausted");
+        return false;
+    }
+    char path[112];
+    snprintf(path, sizeof(path), "%s/projects/%u", base_path, last + 1);
+    if (mkdir(path, 0777) != 0)
+        return file_error("Create project");
+    *project = last + 1;
+    return true;
+}
 
 bool workspace_remove(const char *path) {
     char filename[192], backup[256];

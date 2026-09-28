@@ -58,7 +58,11 @@ The draft survives view switches. Stop agent and Stop program are independent.
 Sessions are discovered on SD and listed in bounded pages.
 Create, switch, reset, and delete do not depend on predefined session slots.
 Reset retains the selected model and project files.
-The interface still exposes eight project slots.
+Projects are discovered from numbered SD directories and listed in bounded pages.
+Users create projects on demand without predefined slots.
+The runtime compiles palette sprites and note sequences from editable Lua assets.
+Asset loading uses the project path restrictions and runs only during startup or `init`.
+Three square-wave voices and one noise voice provide synthesized music and effects through libnds.
 
 ## Input behavior
 
@@ -85,6 +89,6 @@ Authenticated host inference is a separate manual check using a temporary creden
 - Validate full DSi emulation with user-owned BIOS, firmware, and NAND copies.
 - Add session titles and last-session reopening if selected for a future iteration.
 - Design long-session context summaries before lifting the current session size limit.
-- Add sprites or audio only after validating their budgets.
+- Verify synthesized audio and sprite-demo controls on a physical DSi.
 
 These items are not completed claims. See `docs/verification.md` for evidence.

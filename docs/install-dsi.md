@@ -19,7 +19,7 @@ nix build .#installation-kit -o result-installation
 5. Configure Wi-Fi and the correct date and time in the console system settings.
 6. Launch the ROM through TWiLight Menu++ in DSi mode.
 
-For an offline example, copy `02-menu/lutin/projects/1/main.lua` into the corresponding SD directory.
+For an offline example, copy all files from `02-menu/lutin/projects/1/` into the corresponding SD directory.
 Do not replace an existing creation with this example.
 For later updates, replace the ROM and update the CA bundle when needed.
 

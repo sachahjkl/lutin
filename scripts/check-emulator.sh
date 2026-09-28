@@ -6,6 +6,7 @@ output=$(realpath -m "${2:?Supply an empty output directory.}")
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 config=${3:-$root/tests/melonds.toml}
 scheduler=$(realpath "${4:?Supply the scheduler test ROM path.}")
+fixtures=${5:-$root/examples}
 mkdir -p "$output"
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
@@ -16,6 +17,20 @@ mkdir -p "$XDG_CONFIG_HOME/melonDS" "$XDG_RUNTIME_DIR"
 chmod 700 "$XDG_RUNTIME_DIR"
 cp "$config" "$XDG_CONFIG_HOME/melonDS/melonDS.toml"
 chmod u+w "$XDG_CONFIG_HOME/melonDS/melonDS.toml"
+mkdir -p "$work/sd/lutin/projects/1"
+cp "$fixtures/media.lua" "$work/sd/lutin/projects/1/main.lua"
+cp "$fixtures/hero.lua" "$fixtures/sounds.lua" "$work/sd/lutin/projects/1/"
+chmod -R u+w "$work/sd"
+cat >>"$XDG_CONFIG_HOME/melonDS/melonDS.toml" <<EOF
+
+[DLDI]
+Enable = true
+ImagePath = "$work/dldi.bin"
+ImageSize = 0
+ReadOnly = false
+FolderSync = true
+FolderPath = "$work/sd"
+EOF
 cp "$rom" "$work/lutin.nds"
 chmod u+w "$work/lutin.nds"
 cp "$scheduler" "$work/scheduler.nds"
@@ -57,6 +72,7 @@ timeout --kill-after=2 120 xvfb-run -a -s '-screen 0 800x1000x24' bash -euo pipe
   tesseract "$output/running.png" "$output/running" -l eng --psm 6 2>> "$output/ocr.log"
   cat "$output/running.txt"
   grep -Eq "RUN" "$output/running.txt"
+  grep -Eiq "SPRITES.*AUDIO" "$output/running.txt"
   press Return
   sleep 0.3
   press Up Up Up a
@@ -81,6 +97,14 @@ timeout --kill-after=2 120 xvfb-run -a -s '-screen 0 800x1000x24' bash -euo pipe
   tesseract "$output/models.png" "$output/models" -l eng --psm 6 2>> "$output/ocr.log"
   cat "$output/models.txt"
   grep -Eiq "DeepSeek|Deepseek|DeepSeck" "$output/models.txt"
+  press Return Up Up Up Up Up Up a
+  press Return Down Down Down Down a
+  press x
+  sleep 1
+  magick import -window "$window" "$output/projects.png"
+  tesseract "$output/projects.png" "$output/projects" -l eng --psm 6 2>> "$output/ocr.log"
+  cat "$output/projects.txt"
+  grep -Eiq "Project 2" "$output/projects.txt"
   kill -KILL "$emulator"
   wait "$emulator" 2>/dev/null || true
   stdbuf -oL -eL melonDS "$3" > "$output/scheduler.log" 2>&1 &

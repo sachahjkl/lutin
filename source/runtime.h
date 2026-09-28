@@ -23,5 +23,10 @@ size_t runtime_memory(void);
 void runtime_set_font(const unsigned char *font);
 bool runtime_capture(const char *path);
 unsigned runtime_logs(unsigned cursor, char *output, size_t capacity);
+typedef char *(*RuntimeAssetReader)(const char *path, size_t limit);
+typedef void (*RuntimeAudio)(unsigned voice, unsigned frequency,
+                             unsigned volume);
+void runtime_set_asset_reader(RuntimeAssetReader reader);
+void runtime_set_audio(RuntimeAudio output);
 
 #endif

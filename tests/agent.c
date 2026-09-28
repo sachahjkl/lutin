@@ -81,6 +81,7 @@ static bool native(const char *name, const char *json, char *output,
 
 int main(void) {
     workspace_init(true, "test-projects");
+    runtime_set_asset_reader(workspace_read);
     assert(agent_open(1));
     assert(agent_submit("Create an animation", false));
     agent_tick();

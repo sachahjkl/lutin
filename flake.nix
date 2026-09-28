@@ -104,7 +104,9 @@
       cp ${rom}/lutin.nds "$out/roms/nds/lutin.nds"
       cp ${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt "$out/lutin/ca.pem"
       cp ${./examples/config.json} "$out/lutin/config.json"
-      cp ${./examples/animation.lua} "$out/lutin/projects/1/main.lua"
+      cp ${./examples/media.lua} "$out/lutin/projects/1/main.lua"
+      cp ${./examples/hero.lua} "$out/lutin/projects/1/hero.lua"
+      cp ${./examples/sounds.lua} "$out/lutin/projects/1/sounds.lua"
       cp ${./docs/usage.md} "$out/usage.md"
       cp ${./docs/install-dsi.md} "$out/install-dsi.md"
       cp ${./LICENSE} "$out/LICENSE"
@@ -204,7 +206,7 @@
         nativeBuildInputs = emulatorTools;
         FONTCONFIG_FILE = pkgs.makeFontsConf {fontDirectories = [pkgs.dejavu_fonts];};
       } ''
-        bash ${./scripts/check-emulator.sh} ${rom}/lutin.nds "$out" ${./tests/melonds.toml} ${schedulerRom}/scheduler.nds
+        bash ${./scripts/check-emulator.sh} ${rom}/lutin.nds "$out" ${./tests/melonds.toml} ${schedulerRom}/scheduler.nds ${./examples}
       '';
     presentationCheck =
       pkgs.runCommand "lutin-presentation-check" {
@@ -260,6 +262,16 @@
       presentation = presentationCheck;
     };
     checks.${system} = {
+      media = pkgs.runCommand "lutin-media-check" {nativeBuildInputs = [pkgs.stdenv.cc];} ''
+        mkdir -p projects/1
+        cp ${./examples/media.lua} projects/1/main.lua
+        cp ${./examples/hero.lua} projects/1/hero.lua
+        cp ${./examples/sounds.lua} projects/1/sounds.lua
+        cc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -g -I${luaSource}/src -I${./source} \
+          ${./tests/media.c} ${./source/runtime.c} ${./source/workspace.c} ${luaSource}/src/*.c -lm -o test-media
+        timeout 10 ./test-media
+        touch "$out"
+      '';
       reproducible-rom = reproducibleRomCheck;
       presentation-rom = presentationRom;
       presentation = presentationCheck;

@@ -54,7 +54,7 @@ START opens a modal menu from every view.
 | Keyboard: B                  | Cancel Queue editing without deleting the draft. |
 
 The menu includes Keyboard, Preview, Play controls, Queue, Source, Sessions, and Model.
-It also includes Run program, Stop program, Stop agent, Resume queue, Next project, Save source, Tool details, and Quit.
+It also includes Run program, Stop program, Stop agent, Resume queue, Projects, Save source, Tool details, and Quit.
 The keyboard retains the draft when switching views.
 Source displays `main.lua`, with Up/Down scrolling.
 
@@ -98,7 +98,12 @@ Switching sessions interrupts the active generation and retains saved results.
 Reset clears the conversation, Queue, and tool journal, but retains the selected model.
 Reset and delete preserve project files and the running creation.
 
-The interface exposes eight projects under `/lutin/projects/1/` through `/lutin/projects/8/`.
+Projects live under `/lutin/projects/<number>/` and are discovered from SD.
+START → Projects opens a paginated list with twelve entries per page.
+Up/Down selects a project. A opens it. X creates and opens a new project.
+Right opens the next page. Left returns to the first page.
+Stop the agent and program before opening another project.
+There are no predefined project slots. Available SD space limits storage.
 Each project contains Lua files and `session-N.json` journals.
 Sessions store the provider-qualified model ID, so names from different providers cannot collide.
 
@@ -132,17 +137,26 @@ START → Stop agent cancels the request when control returns to the main loop.
 
 ## Creation API
 
+Dynamic projects and the sprite/audio APIs below require a source build after `v0.3.0`.
+See [Sprites and audio](assets.md) for asset formats, generation examples, and playback limits.
+
 A program defines optional `init()`, `update(dt)`, and `draw()` functions.
 `dt` is `1/60`. Actual update frequency depends on runtime and network work.
 
-| Function                              | Result                             |
-| ------------------------------------- | ---------------------------------- |
-| `ds.clear(color)`                     | Fill the lower-screen framebuffer. |
-| `ds.rect(x, y, width, height, color)` | Draw a filled rectangle.           |
-| `ds.line(x1, y1, x2, y2, color)`      | Draw a line.                       |
-| `ds.text(x, y, text, color)`          | Draw ASCII text.                   |
-| `ds.buttons()`                        | Return `held, pressed` masks.      |
-| `ds.touch()`                          | Return `x, y, down`.               |
+| Function                                    | Result                                                         |
+| ------------------------------------------- | -------------------------------------------------------------- |
+| `ds.clear(color)`                           | Fill the lower-screen framebuffer.                             |
+| `ds.rect(x, y, width, height, color)`       | Draw a filled rectangle.                                       |
+| `ds.line(x1, y1, x2, y2, color)`            | Draw a line.                                                   |
+| `ds.text(x, y, text, color)`                | Draw ASCII text.                                               |
+| `ds.buttons()`                              | Return `held, pressed` masks.                                  |
+| `ds.touch()`                                | Return `x, y, down`.                                           |
+| `ds.load_asset(path)`                       | Execute a project Lua asset and return its value.              |
+| `ds.sprite(rows, palette)`                  | Compile a palette-based sprite.                                |
+| `ds.draw_sprite(sprite, x, y, scale, flip)` | Draw a sprite with optional integer scale and horizontal flip. |
+| `ds.sound(wave, notes)`                     | Compile a synthesized note sequence.                           |
+| `ds.play_sound(sound, voice, loop)`         | Start or replace playback on a voice.                          |
+| `ds.stop_sound(voice)`                      | Stop one voice.                                                |
 
 The framebuffer is 256 × 192 pixels. Colors use `0xRRGGBB`.
 Coordinates must be integers between −4,096 and 4,096. Drawing clips at screen edges.

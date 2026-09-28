@@ -52,4 +52,4 @@ Backlog tools were unavailable. This Spec Kit record does not modify `BACKLOG.js
 
 - [x] T032 Remove the personal inference endpoint and document OpenCode Go.
 - [x] T033 Add the supplied logo, project metadata, MIT license, and English documentation.
-- [ ] T034 Publish the GitHub repository, CI, and release artifacts after final checks.
+- [x] T034 Publish the GitHub repository, CI, and release artifacts after final checks.

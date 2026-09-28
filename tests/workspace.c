@@ -62,6 +62,21 @@ static void expect(const char *text) {
 
 int main(void) {
     workspace_init(true, "storage");
+    unsigned created, projects[12], count;
+    for (unsigned i = 2; i <= 16; i++)
+        assert(workspace_create(&created) && created == i);
+    assert(workspace_select(1234));
+    assert(workspace_projects(0, projects, 12, &count) && count == 12);
+    assert(projects[0] == 1 && projects[11] == 12);
+    assert(workspace_projects(12, projects, 12, &count) && count == 5);
+    assert(projects[0] == 13 && projects[4] == 1234);
+    assert(mkdir("storage/projects/0017", 0700) == 0);
+    FILE *not_directory = fopen("storage/projects/18", "wb");
+    assert(not_directory && fclose(not_directory) == 0);
+    assert(workspace_projects(16, projects, 12, &count) && count == 1 &&
+           projects[0] == 1234);
+    assert(workspace_create(&created) && created == 1235);
+    assert(workspace_select(1));
     assert(workspace_write("main.lua", "old"));
     assert(workspace_write("main.lua", "new"));
     expect("new");
@@ -110,9 +125,9 @@ int main(void) {
     assert(backup && fwrite("stale", 1, 5, backup) == 5 && fclose(backup) == 0);
     workspace_init(true, "storage");
     expect("committed");
-    FILE *collision = fopen("storage/projects/2", "wb");
+    FILE *collision = fopen("storage/projects/18", "wb");
     assert(collision && fclose(collision) == 0);
-    assert(!workspace_select(2));
+    assert(!workspace_select(18));
     assert(strcmp(workspace_root(), "storage/projects/1") == 0);
     expect("committed");
     assert(workspace_select(3));

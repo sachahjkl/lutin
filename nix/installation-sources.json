@@ -1,0 +1,30 @@
+{
+  "TWiLightMenu-DSi.7z": {
+    "url": "https://github.com/DS-Homebrew/TWiLightMenu/releases/download/v27.24.1/TWiLightMenu-DSi.7z",
+    "sha256": "c04fc66305ce8dc80e69aa4070d3ce966f04868881663f57b91f68d687a2bb90"
+  },
+  "unlaunch-installer.dsi": {
+    "url": "https://github.com/edo9300/unlaunch-installer/releases/download/v2.6/unlaunch-installer.dsi",
+    "sha256": "14ba0b4af84e801206e20cffdf55002e3b4b5dd8be18abf3c0977011b23f1aeb"
+  },
+  "dumpTool.nds": {
+    "url": "https://github.com/zoogie/dumpTool/releases/download/v1.0/dumpTool.nds",
+    "sha256": "313b255a754bda4d06d6f761a7490b4f1675c957c41676119330520cb09a47ea"
+  },
+  "pit-facebook.bin": {
+    "url": "https://raw.githubusercontent.com/cfw-guide/dsi.cfw.guide/d49df320a17c7131d908b85cb9ada596b1020471/docs/public/assets/files/memory_pit/768_1024/pit.bin",
+    "sha256": "ca4c197ef81283ad0c802fdc39bcb6c880e2e182cb7ac5c456a68368e50bbe14"
+  },
+  "pit-no-facebook.bin": {
+    "url": "https://raw.githubusercontent.com/cfw-guide/dsi.cfw.guide/d49df320a17c7131d908b85cb9ada596b1020471/docs/public/assets/files/memory_pit/256/pit.bin",
+    "sha256": "9f2b97bfb9569723ed5c0c48f314ab8c94e56e855acb468db727b8ecf059342b"
+  },
+  "dsibiosdumper.7z": {
+    "url": "https://melonds.kuribo64.net/downloads/dsibiosdumper.7z",
+    "sha256": "a08dda9854cb27f8ce81cb659af4518bb5851be7f578cd32e6a23115810c6be8"
+  },
+  "sdFormatLinux.7z": {
+    "url": "https://github.com/profi200/sdFormatLinux/releases/download/v0.2.0/sdFormatLinux_v0.2.0.7z",
+    "sha256": "b67e64cea9ba1725737177e4a4adb783a553c561f008bc1ff7ba384d4dcdbf74"
+  }
+}

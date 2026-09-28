@@ -1,0 +1,28 @@
+[Emu]
+ConsoleType = 0
+DirectBoot = true
+ExternalBIOSEnable = false
+
+[Screen]
+UseGL = false
+Filter = false
+
+[Instance0]
+
+[Instance0.Keyboard]
+A = 65
+B = 66
+X = 88
+Y = 89
+L = 76
+R = 82
+Select = 83
+Start = 16777220
+Up = 16777235
+Down = 16777237
+
+[Instance0.Window0]
+IntegerScaling = true
+ShowOSD = false
+Width = 512
+Height = 800

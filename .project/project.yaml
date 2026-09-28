@@ -1,0 +1,14 @@
+name: "Lutin"
+description: "An AI coding agent for Nintendo DSi that writes, runs, and edits Lua programs."
+topics:
+  - "nintendo-dsi"
+  - "homebrew"
+  - "ai-agent"
+  - "lua"
+  - "c"
+  - "nix"
+homepage: ""
+source:
+  provider: github
+  namespace: "sachahjkl"
+  path: "sachahjkl/lutin"

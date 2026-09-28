@@ -1,0 +1,90 @@
+# Implementation plan: Lutin
+
+**Feature:** `001-dsi-ai-sandbox`
+**Updated:** 2026-09-28
+**Status:** native coding agent implemented, publication and hardware validation in progress.
+
+## Product direction
+
+Lutin is an AI coding agent for Nintendo DSi.
+The AI creates interactive Lua programs through tools. The console runs them locally.
+The selected launch path is the console SD slot with Unlaunch and TWiLight Menu++ in DSi mode.
+The user has tested the agent on a DSi XL.
+
+```text
+DSi interface → agent → protocol adapter → HTTPS → OpenCode Go
+                  ↓
+            file/runtime tools → local Lua creation → lower screen
+                  ↓
+             SD project and session journal
+```
+
+## Implemented layers
+
+1. BlocksDS toolchain, native ROM, Nix development shell, and automated checks.
+2. Lua 5.4.9 with 32-bit numbers, drawing/input API, and per-state budgets.
+3. Persistent project storage with FAT-safe replacement and backup recovery.
+4. Autonomous tools, session journals, Queue, Steer, and interrupted-call recovery.
+5. Colored upper-screen chat and persistent lower-screen keyboard, preview, or gameplay.
+6. OpenCode Go models with separate Responses and Chat Completions adapters.
+7. Dynamic sessions, configuration file, versioned write chunks, and paged reads.
+8. VBlank input capture and menu isolation, with host and emulator regressions.
+
+## Technical decisions
+
+| Area           | Decision                                                         |
+| -------------- | ---------------------------------------------------------------- |
+| Console SDK    | BlocksDS/libnds and DSWiFi.                                      |
+| Network        | libcurl with Mbed TLS and certificate verification.              |
+| Service        | OpenCode Go directly. No personal endpoint.                      |
+| Default model  | GPT 6 Luna. DeepSeek V4 Flash uses Chat Completions.             |
+| Credentials    | `/ai-dsi/opencode-key`, loaded at runtime.                       |
+| Configuration  | `/ai-dsi/config.json`, strict validation with atomic rejection.  |
+| Language       | Lua 5.4.9, separate creation and Code Mode states.               |
+| Rendering      | RAM framebuffer and terminal maps, copied to VRAM at VBlank.     |
+| Scheduling     | Cooperative VBlank waits keep the DSWiFi receive thread active.  |
+| Input          | VBlank sampling retains press edges until main-loop consumption. |
+| Persistence    | Flat project files and one JSON document per session.            |
+| Model identity | Persist the model string, not its menu position.                 |
+| Publication    | MIT, English documentation, local logo and presentation assets.  |
+
+## Interface
+
+The upper screen displays the conversation and status.
+The lower screen displays the keyboard, preview, game controls, or selected list.
+START opens a modal menu. Only Play controls routes input to a creation.
+The draft survives view switches. Stop agent and Stop program are independent.
+
+Sessions are discovered on SD and listed in bounded pages.
+Create, switch, reset, and delete do not depend on predefined session slots.
+Reset retains the selected model and project files.
+The interface still exposes eight project slots.
+
+## Input behavior
+
+The interrupt captures button state and touch coordinates without executing tools or drawing.
+The main loop handles input before runtime and agent work.
+Agent work skips an iteration when a new press is handled.
+Only keys held in the menu are blocked when returning to play, until each key is released.
+Short taps remain visible for one update. Multiple same-key taps during a stall coalesce.
+This does not preempt TLS, filesystem calls, or other long native operations.
+
+## Checks
+
+`flake.nix` exposes ROM, installation kit, runtime, workspace, agent, network, protocol, SSE, chat, config, input, hooks, and emulator checks.
+Host behavior tests use sanitizers where applicable.
+The emulator uses DS-mode BIOS replacements and requires no private files.
+The input test deliberately stalls the consumer while sending a short button press.
+Authenticated host inference is a separate manual check using a temporary credential file.
+
+## Remaining validation and capabilities
+
+- Measure native-operation latency and combined Lua/TLS memory on a physical DSi.
+- Confirm the new input behavior during console gameplay and live requests.
+- Test power loss during FAT writes on hardware.
+- Validate full DSi emulation with user-owned BIOS, firmware, and NAND copies.
+- Add session titles and last-session reopening if selected for a future iteration.
+- Design long-session context summaries before lifting the current session size limit.
+- Add sprites or audio only after validating their budgets.
+
+These items are not completed claims. See `docs/verification.md` for evidence.

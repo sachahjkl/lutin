@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master, main]
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  check:
+    name: Build and check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: DeterminateSystems/nix-installer-action@3138316df39ed29be04236d7ffc686fa525866aa
+      - name: Run all flake checks
+        run: nix flake check "path:$PWD" --no-write-lock-file --print-build-logs
+      - name: Build artifacts
+        run: |
+          nix build .#rom -o result-rom
+          nix build .#release-kit -o result-release
+          nix build .#emulator-check -o result-emulator
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: lutin-build
+          path: |
+            result-rom/ai-dsi.nds
+            result-release/
+            result-emulator/
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: DeterminateSystems/nix-installer-action@3138316df39ed29be04236d7ffc686fa525866aa
+      - name: Package ROM and SD files
+        run: nix develop --command bash scripts/package-release.sh "$RUNNER_TEMP/release" "$GITHUB_REF_NAME"
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes="docs/releases/$GITHUB_REF_NAME.md"
+          if test -f "$notes"; then
+            gh release create "$GITHUB_REF_NAME" "$RUNNER_TEMP/release/"* --verify-tag --title "Lutin $GITHUB_REF_NAME" --notes-file "$notes"
+          else
+            gh release create "$GITHUB_REF_NAME" "$RUNNER_TEMP/release/"* --verify-tag --title "Lutin $GITHUB_REF_NAME" --generate-notes
+          fi

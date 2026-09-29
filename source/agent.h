@@ -1,6 +1,7 @@
 #ifndef AI_AGENT_H
 #define AI_AGENT_H
 #include <stdbool.h>
+unsigned agent_chat_revision(void);
 typedef void (*AgentConversationText)(const char *role, const char *text,
                                       void *context);
 void agent_conversation(AgentConversationText visit, void *context);

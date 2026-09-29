@@ -33,7 +33,8 @@ DSi interface → agent → protocol adapter → HTTPS → OpenCode Go
 10. Immutable PNG captures, model image-input metadata, and image requests for both transports.
 11. Tilemaps, camera offsets, animation, modules, touch buttons, and project save data.
 12. Source checkpoints with a persistent restore journal and interrupted-restore recovery.
-13. Bounded CPU triangle rendering with near-plane clipping and a fixed depth buffer.
+13. Bounded DS geometry-engine rendering for 2D and 3D, with a host reference renderer.
+14. Program-owned VRAM textures, native display capture, cached chat pages, and changed-only console-map transfers.
 
 See `docs/creation-tools.md` for API contracts and limits.
 
@@ -44,21 +45,21 @@ Provider definitions and model metadata load from `/lutin/models.json`.
 The command menu reloads local files or downloads a bounded compact catalog generated from models.dev and verified transport routes.
 Validation and FAT replacement preserve the previous catalog on failure.
 
-| Area           | Decision                                                         |
-| -------------- | ---------------------------------------------------------------- |
-| Console SDK    | BlocksDS/libnds and DSWiFi.                                      |
-| Network        | libcurl with Mbed TLS and certificate verification.              |
-| Service        | Provider registry; OpenCode Go is the bundled provider.          |
-| Default model  | GPT 6 Luna. DeepSeek V4 Flash uses Chat Completions.             |
-| Credentials    | `/lutin/keys/<provider-id>`, loaded at runtime.                  |
-| Configuration  | `/lutin/config.json`, strict validation with atomic rejection.   |
-| Language       | Lua 5.4.9, separate creation and Code Mode states.               |
-| Rendering      | RAM framebuffer and terminal maps, copied to VRAM at VBlank.     |
-| Scheduling     | Cooperative VBlank waits keep the DSWiFi receive thread active.  |
-| Input          | VBlank sampling retains press edges until main-loop consumption. |
-| Persistence    | Flat project files and one JSON document per session.            |
-| Model identity | Persist the provider-qualified `provider/model` ID.              |
-| Publication    | MIT, English documentation, local logo and presentation assets.  |
+| Area           | Decision                                                                       |
+| -------------- | ------------------------------------------------------------------------------ |
+| Console SDK    | BlocksDS/libnds and DSWiFi.                                                    |
+| Network        | libcurl with Mbed TLS and certificate verification.                            |
+| Service        | Provider registry; OpenCode Go is the bundled provider.                        |
+| Default model  | GPT 6 Luna. DeepSeek V4 Flash uses Chat Completions.                           |
+| Credentials    | `/lutin/keys/<provider-id>`, loaded at runtime.                                |
+| Configuration  | `/lutin/config.json`, strict validation with atomic rejection.                 |
+| Language       | Lua 5.4.9, separate creation and Code Mode states.                             |
+| Rendering      | GPU display lists, VRAM textures, and changed-only terminal-map DMA at VBlank. |
+| Scheduling     | Cooperative VBlank waits keep the DSWiFi receive thread active.                |
+| Input          | VBlank sampling retains press edges until main-loop consumption.               |
+| Persistence    | Flat project files and one JSON document per session.                          |
+| Model identity | Persist the provider-qualified `provider/model` ID.                            |
+| Publication    | MIT, English documentation, local logo and presentation assets.                |
 
 ## Interface
 
@@ -104,6 +105,8 @@ It stalls DNS for 30 seconds and checks cancellation, menu input, late-result is
 It does not validate real Wi-Fi packets, TLS negotiation, or inference on a physical DSi.
 
 ## Remaining validation and capabilities
+
+See `docs/hardware-rendering.md` for renderer ownership, frame budgets, capture synchronization, and hardware verification criteria.
 
 - Measure native-operation latency and combined Lua/TLS memory on a physical DSi.
 - Confirm the new input behavior during console gameplay and live requests.

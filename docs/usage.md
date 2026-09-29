@@ -157,7 +157,7 @@ A program defines optional `init()`, `update(dt)`, and `draw()` functions.
 
 | Function                                    | Result                                                         |
 | ------------------------------------------- | -------------------------------------------------------------- |
-| `ds.clear(color)`                           | Fill the lower-screen framebuffer.                             |
+| `ds.clear(color)`                           | Clear the creation frame and set its background color.         |
 | `ds.rect(x, y, width, height, color)`       | Draw a filled rectangle.                                       |
 | `ds.line(x1, y1, x2, y2, color)`            | Draw a line.                                                   |
 | `ds.text(x, y, text, color)`                | Draw UTF-8 text with supported Latin glyphs.                   |
@@ -170,7 +170,7 @@ A program defines optional `init()`, `update(dt)`, and `draw()` functions.
 | `ds.play_sound(sound, voice, loop)`         | Start or replace playback on a voice.                          |
 | `ds.stop_sound(voice)`                      | Stop one voice.                                                |
 
-The framebuffer is 256 × 192 pixels. Colors use `0xRRGGBB`.
+The creation viewport is 256 × 192 pixels. Colors use `0xRRGGBB`.
 Use `ds.WIDTH`, `ds.HEIGHT`, and `ds.FPS` for screen dimensions and the runtime frame rate.
 Coordinates must be integers between −4,096 and 4,096. Drawing clips at screen edges.
 Use named button masks: `ds.A`, `ds.B`, `ds.X`, `ds.Y`, `ds.LEFT`, `ds.RIGHT`, `ds.UP`, `ds.DOWN`, `ds.L`, and `ds.R`.
@@ -231,7 +231,7 @@ Lua calls use positional arguments and multiple return values:
 Paths are flat filenames relative to the active project.
 Tools cannot write session journals or access the credential directory.
 Image-capable models receive the latest capture as image input. Text-only models reject the capture tool.
-See [Creation tools](creation-tools.md) for test examples, reusable APIs, software 3D, and checkpoint limits.
+See [Creation tools](creation-tools.md) for test examples, reusable APIs, hardware rendering, and checkpoint limits.
 
 ## Limits and recovery
 

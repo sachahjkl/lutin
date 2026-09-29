@@ -12,12 +12,18 @@ typedef struct {
     unsigned vertices, faces;
     Vertex positions[MESH_MAX_VERTICES];
     Face triangles[MESH_MAX_FACES];
+#ifdef ARM9
+    int16_t packed[MESH_MAX_VERTICES][3];
+    float scale;
+#endif
 } Mesh;
 
 /* Fixed rendering scratch: no per-frame allocations or pointers into Lua. */
 static struct {
     Vertex vertices[MESH_MAX_VERTICES];
+#ifndef ARM9
     uint32_t depth[RUNTIME_SCREEN_WIDTH * RUNTIME_SCREEN_HEIGHT];
+#endif
 } mesh_scratch;
 static bool mesh_clear_depth = true;
 
@@ -52,6 +58,20 @@ static int mesh_create(lua_State *state) {
         mesh->positions[i] = (Vertex){values[0], values[1], values[2]};
         lua_pop(state, 1);
     }
+#ifdef ARM9
+    mesh->scale = 1;
+    for (unsigned i = 0; i < vertices; i++) {
+        Vertex p = mesh->positions[i];
+        while (fmaxf(fabsf(p.x), fmaxf(fabsf(p.y), fabsf(p.z))) / mesh->scale >
+               7.5f)
+            mesh->scale *= 2;
+    }
+    for (unsigned i = 0; i < vertices; i++) {
+        mesh->packed[i][0] = lroundf(mesh->positions[i].x * 4096 / mesh->scale);
+        mesh->packed[i][1] = lroundf(mesh->positions[i].y * 4096 / mesh->scale);
+        mesh->packed[i][2] = lroundf(mesh->positions[i].z * 4096 / mesh->scale);
+    }
+#endif
     for (unsigned i = 0; i < faces; i++) {
         lua_rawgeti(state, 2, i + 1);
         luaL_checktype(state, -1, LUA_TTABLE);
@@ -83,6 +103,7 @@ static int camera3d(lua_State *state) {
     return 0;
 }
 
+#ifndef ARM9
 static int64_t mesh_edge(int64_t ax, int64_t ay, int64_t bx, int64_t by,
                          int64_t x, int64_t y) {
     return (x - ax) * (by - ay) - (y - ay) * (bx - ax);
@@ -168,6 +189,65 @@ static void mesh_triangle(lua_State *state, Vertex a, Vertex b, Vertex c,
     }
 }
 
+#else
+static void mesh_triangle(lua_State *state, Vertex a, Vertex b, Vertex c,
+                          uint16_t color) {
+    graphics_budget(state, 1, 3);
+    Vertex vertices[3] = {a, b, c};
+    float scale = 1;
+    for (unsigned i = 0; i < 3; i++)
+        while (fmaxf(fabsf(vertices[i].x),
+                     fmaxf(fabsf(vertices[i].y), fabsf(vertices[i].z))) /
+                   scale >
+               7.5f)
+            scale *= 2;
+    int32_t factor = (int32_t)(scale * 4096);
+    int32_t model[16] = {factor, 0, 0,      0, 0, factor, 0, 0,
+                         0,      0, factor, 0, 0, 0,      0, 4096};
+    graphics_mesh_matrix(state, model);
+    graphics_material(state, 0, color);
+    graphics_word(state, FIFO_BEGIN, GL_TRIANGLES);
+    for (unsigned i = 0; i < 3; i++)
+        graphics_vertex(state, lroundf(vertices[i].x * 4096 / scale),
+                        lroundf(vertices[i].y * 4096 / scale),
+                        lroundf(vertices[i].z * 4096 / scale));
+    graphics_command(state, FIFO_END, 0, NULL);
+}
+#endif
+
+static unsigned mesh_clip(const Vertex *input, unsigned count, Vertex *output,
+                          float plane, bool near) {
+    unsigned written = 0;
+    for (unsigned i = 0; i < count; i++) {
+        Vertex a = input[i], b = input[(i + 1) % count];
+        bool inside_a = near ? a.z >= plane : a.z <= plane;
+        bool inside_b = near ? b.z >= plane : b.z <= plane;
+        if (inside_a)
+            output[written++] = a;
+        if (inside_a != inside_b) {
+            float t = (plane - a.z) / (b.z - a.z);
+            output[written++] =
+                (Vertex){a.x + t * (b.x - a.x), a.y + t * (b.y - a.y), plane};
+        }
+    }
+    return written;
+}
+
+#ifdef ARM9
+static Vertex mesh_view(Vertex p, float sine, float cosine, float pitch_sine,
+                        float pitch_cosine) {
+    float x = p.x * cosine + p.z * sine, z = -p.x * sine + p.z * cosine;
+    return (Vertex){x, p.y * pitch_cosine - z * pitch_sine,
+                    p.y * pitch_sine + z * pitch_cosine};
+}
+static Vertex mesh_transform(Vertex p, const Vertex basis[4]) {
+    return (Vertex){
+        basis[0].x * p.x + basis[1].x * p.y + basis[2].x * p.z + basis[3].x,
+        basis[0].y * p.x + basis[1].y * p.y + basis[2].y * p.z + basis[3].y,
+        basis[0].z * p.x + basis[1].z * p.y + basis[2].z * p.z + basis[3].z};
+}
+#endif
+
 static int mesh_draw(lua_State *state) {
     Mesh *mesh = luaL_checkudata(state, 1, "lutin.mesh");
     charge_pixels(state, mesh->vertices + mesh->faces * 3);
@@ -180,10 +260,37 @@ static int mesh_draw(lua_State *state) {
           view_cosine = cosf(-runtime->eye_yaw);
     float pitch_sine = sinf(-runtime->eye_pitch),
           pitch_cosine = cosf(-runtime->eye_pitch);
+#ifndef ARM9
     if (mesh_clear_depth) {
         memset(mesh_scratch.depth, 0, sizeof(mesh_scratch.depth));
         mesh_clear_depth = false;
     }
+#endif
+#ifdef ARM9
+    Vertex basis[4] = {
+        mesh_view((Vertex){cosine, 0, -sine}, view_sine, view_cosine,
+                  pitch_sine, pitch_cosine),
+        mesh_view((Vertex){0, 1, 0}, view_sine, view_cosine, pitch_sine,
+                  pitch_cosine),
+        mesh_view((Vertex){sine, 0, cosine}, view_sine, view_cosine, pitch_sine,
+                  pitch_cosine),
+        mesh_view((Vertex){x - runtime->eye_x, y - runtime->eye_y,
+                           z - runtime->eye_z},
+                  view_sine, view_cosine, pitch_sine, pitch_cosine)};
+    int32_t model[16] = {0};
+    for (unsigned i = 0; i < 4; i++) {
+        float scale = i == 3 ? 1 : mesh->scale;
+        model[i * 4] = lroundf(basis[i].x * scale * 4096);
+        model[i * 4 + 1] = lroundf(basis[i].y * scale * 4096);
+        model[i * 4 + 2] = lroundf(basis[i].z * scale * 4096);
+    }
+    model[15] = 4096;
+    for (unsigned i = 0; i < mesh->vertices; i++) {
+        Vertex p = mesh->positions[i];
+        mesh_scratch.vertices[i].z =
+            basis[0].z * p.x + basis[1].z * p.y + basis[2].z * p.z + basis[3].z;
+    }
+#else
     for (unsigned i = 0; i < mesh->vertices; i++) {
         Vertex p = mesh->positions[i];
         float px = p.x * cosine + p.z * sine + x - runtime->eye_x;
@@ -195,22 +302,39 @@ static int mesh_draw(lua_State *state) {
             (Vertex){vx, py * pitch_cosine - vz * pitch_sine,
                      py * pitch_sine + vz * pitch_cosine};
     }
-    const float near_plane = 0.25f;
+#endif
     for (unsigned i = 0; i < mesh->faces; i++) {
         Face *face = &mesh->triangles[i];
-        Vertex clipped[4];
-        unsigned count = 0;
+        Vertex triangle[3], near_clipped[4], clipped[5];
+#ifdef ARM9
+        bool inside = true;
+        float margin = mesh->scale / 1024;
         for (unsigned j = 0; j < 3; j++) {
-            Vertex a = mesh_scratch.vertices[face->indices[j]],
-                   b = mesh_scratch.vertices[face->indices[(j + 1) % 3]];
-            if (a.z >= near_plane)
-                clipped[count++] = a;
-            if ((a.z >= near_plane) != (b.z >= near_plane)) {
-                float t = (near_plane - a.z) / (b.z - a.z);
-                clipped[count++] = (Vertex){a.x + t * (b.x - a.x),
-                                            a.y + t * (b.y - a.y), near_plane};
-            }
+            float depth = mesh_scratch.vertices[face->indices[j]].z;
+            if (depth < 0.25f + margin || depth > 128.0f - margin)
+                inside = false;
         }
+        if (inside) {
+            graphics_budget(state, 1, 3);
+            graphics_mesh_matrix(state, model);
+            graphics_material(state, 0, face->color);
+            graphics_word(state, FIFO_BEGIN, GL_TRIANGLES);
+            for (unsigned j = 0; j < 3; j++) {
+                const int16_t *v = mesh->packed[face->indices[j]];
+                graphics_vertex(state, v[0], v[1], v[2]);
+            }
+            graphics_command(state, FIFO_END, 0, NULL);
+            continue;
+        }
+        for (unsigned j = 0; j < 3; j++)
+            triangle[j] =
+                mesh_transform(mesh->positions[face->indices[j]], basis);
+#else
+        for (unsigned j = 0; j < 3; j++)
+            triangle[j] = mesh_scratch.vertices[face->indices[j]];
+#endif
+        unsigned count = mesh_clip(triangle, 3, near_clipped, 0.25f, true);
+        count = mesh_clip(near_clipped, count, clipped, 128.0f, false);
         for (unsigned j = 1; j + 1 < count; j++)
             mesh_triangle(state, clipped[0], clipped[j], clipped[j + 1],
                           face->color);

@@ -42,7 +42,8 @@ end
 
 Scale defaults to 1 and accepts integers 1–8. `flip` defaults to false and mirrors horizontally.
 Drawing clips at screen edges and uses the existing pixel budget.
-Sprites use the framebuffer renderer.
+On the console, sprites use textures in VRAM and quads on the DS geometry engine.
+The host test renderer uses a RAM framebuffer.
 For animation, return a table of sprites and select a frame in `draw()`.
 See [`examples/hero.lua`](../examples/hero.lua) for a two-frame example.
 

@@ -6,6 +6,7 @@
 
 typedef struct {
     char arguments[32769], call_id[128], name[64];
+    size_t arguments_used, call_id_used, name_used;
 } ProtocolCall;
 
 typedef struct {
@@ -14,6 +15,7 @@ typedef struct {
     bool failed, finished;
     bool limited;
     char text[32769], reasoning[32769];
+    size_t text_used, reasoning_used;
     ProtocolCall calls[4];
 } ProtocolStream;
 static ProtocolStream stream;
@@ -155,14 +157,16 @@ static void emit(cJSON *event) {
     cJSON_Delete(event);
 }
 
-static void append(char *target, size_t capacity, const char *value) {
-    size_t used = strlen(target), length = strlen(value);
-    if (length >= capacity - used) {
+static void append(char *target, size_t capacity, size_t *used,
+                   const char *value) {
+    size_t length = strlen(value);
+    if (length >= capacity - *used) {
         stream.failed = true;
         stream.limited = true;
         return;
     }
-    memcpy(target + used, value, length + 1);
+    memcpy(target + *used, value, length + 1);
+    *used += length;
 }
 
 static void output(cJSON *item) {
@@ -247,8 +251,8 @@ void protocol_event(const char *data) {
     cJSON *choice = cJSON_GetArrayItem(choices, 0);
     cJSON *delta = cJSON_GetObjectItemCaseSensitive(choice, "delta");
     const char *content = text(delta, "content");
-    append(stream.text, sizeof(stream.text), content);
-    append(stream.reasoning, sizeof(stream.reasoning),
+    append(stream.text, sizeof(stream.text), &stream.text_used, content);
+    append(stream.reasoning, sizeof(stream.reasoning), &stream.reasoning_used,
            text(delta, "reasoning_content"));
     if (*content && !stream.failed) {
         cJSON *event = cJSON_CreateObject();
@@ -270,10 +274,12 @@ void protocol_event(const char *data) {
         }
         ProtocolCall *pending = &stream.calls[index->valueint];
         cJSON *function = cJSON_GetObjectItemCaseSensitive(call, "function");
-        append(pending->call_id, sizeof(pending->call_id), text(call, "id"));
-        append(pending->name, sizeof(pending->name), text(function, "name"));
+        append(pending->call_id, sizeof(pending->call_id),
+               &pending->call_id_used, text(call, "id"));
+        append(pending->name, sizeof(pending->name), &pending->name_used,
+               text(function, "name"));
         append(pending->arguments, sizeof(pending->arguments),
-               text(function, "arguments"));
+               &pending->arguments_used, text(function, "arguments"));
     }
     const char *reason = text(choice, "finish_reason");
     if (!strcmp(reason, "length"))

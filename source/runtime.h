@@ -44,7 +44,14 @@ typedef struct {
     bool touching;
 } RuntimeInput;
 
+typedef struct {
+    unsigned loop_us, work_us, display_us, ui_us, agent_us;
+    unsigned display_bytes, missed_vblanks;
+} RuntimePlatformMetrics;
+void runtime_platform_metrics(RuntimePlatformMetrics metrics);
+
 bool runtime_start(const char *code);
+void runtime_graphics_init(void);
 bool runtime_start_test(const char *code, unsigned seed);
 bool runtime_step(unsigned frames, unsigned buttons, int x, int y);
 void runtime_finish_test(void);

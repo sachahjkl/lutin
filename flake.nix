@@ -65,7 +65,7 @@
     };
     rom = pkgs.blocksdsNix.stdenvBlocksdsSlim.mkDerivation {
       pname = "lutin";
-      version = "0.6.0";
+      version = "0.7.0";
       src = source;
       nativeBuildInputs = [pkgs.gnumake];
       LUA_SOURCE = luaSource;
@@ -114,6 +114,15 @@
       } ''
         bash ${./scripts/record-creation.sh} ${creationReplayRom}/lutin.nds ${fixtures} "$out" ${./tests/melonds.toml} ${./catalog/models.json}
       '';
+    hardwareRom = rom.overrideAttrs (_: {
+      pname = "lutin-hardware-test";
+      src = pkgs.lib.fileset.toSource {
+        root = ./.;
+        fileset = pkgs.lib.fileset.unions [./Makefile ./source ./tests/hardware.c];
+      };
+      postPatch = "cp tests/hardware.c source/hardware-test.c";
+      LDFLAGS = "-Wl,--wrap=runtime_set_font";
+    });
     installationKit = import ./nix/installation-kit.nix {inherit pkgs rom;};
     releaseKit = pkgs.runCommand "lutin-sd-kit" {} ''
       mkdir -p "$out/roms/nds" "$out/lutin/projects/1" "$out/lutin/keys"
@@ -338,6 +347,13 @@
       presentation = presentationCheck;
     };
     checks.${system} = {
+      hardware-emulator =
+        pkgs.runCommand "lutin-hardware-check" {
+          nativeBuildInputs = emulatorTools;
+          FONTCONFIG_FILE = pkgs.makeFontsConf {fontDirectories = [pkgs.dejavu_fonts];};
+        } ''
+          bash ${./scripts/check-hardware-emulator.sh} ${hardwareRom}/lutin.nds "$out" ${./tests/melonds.toml}
+        '';
       creation =
         pkgs.runCommand "lutin-creation-check" {
           nativeBuildInputs = [pkgs.stdenv.cc];

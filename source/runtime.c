@@ -26,6 +26,9 @@ typedef struct {
 
 typedef struct {
     unsigned width, height;
+#ifdef ARM9
+    uint32_t texture;
+#endif
     uint16_t pixels[];
 } Sprite;
 typedef struct {
@@ -54,6 +57,10 @@ typedef struct {
     float eye_x, eye_y, eye_z, eye_yaw, eye_pitch;
     cJSON *temporary_json;
     Voice voices[RUNTIME_AUDIO_VOICES];
+#ifdef ARM9
+    int textures[128];
+    unsigned texture_count, texture_bytes;
+#endif
 } Runtime;
 
 static Runtime active;
@@ -67,9 +74,18 @@ static RuntimeAudio audio_output;
 static RuntimeSaveWriter save_writer;
 static bool testing;
 static unsigned test_buttons;
-static uint16_t test_pixels[RUNTIME_SCREEN_WIDTH * RUNTIME_SCREEN_HEIGHT];
+static uint16_t test_pixels[RUNTIME_SCREEN_WIDTH * RUNTIME_SCREEN_HEIGHT]
+    __attribute__((aligned(32)));
 static unsigned frame_count, last_frame_us, peak_frame_us, budget_failures;
 static size_t peak_memory;
+static RuntimePlatformMetrics platform_metrics;
+void runtime_platform_metrics(RuntimePlatformMetrics metrics) {
+    platform_metrics = metrics;
+}
+static Runtime *context(lua_State *state);
+#ifdef ARM9
+#include "graphics_nds.h"
+#endif
 
 static uint64_t microseconds(void) {
 #ifdef ARM9
@@ -109,14 +125,28 @@ unsigned runtime_logs(unsigned cursor, char *output, size_t capacity) {
 
 void runtime_set_font(const unsigned char *value) { font = value; }
 
+#ifndef ARM9
 static void pixel(int x, int y, uint16_t value) {
     if (input.pixels && x >= 0 && y >= 0 && x < RUNTIME_SCREEN_WIDTH &&
         y < RUNTIME_SCREEN_HEIGHT)
         input.pixels[y * RUNTIME_SCREEN_WIDTH + x] = value;
 }
+#endif
+
+void runtime_graphics_init(void) {
+#ifdef ARM9
+    glInit();
+    glEnable(GL_TEXTURE_2D);
+    glDisable(GL_BLEND | GL_ANTIALIAS);
+    glClearDepth(GL_MAX_DEPTH);
+    glViewport(0, 0, 255, 191);
+    graphics.initialized = true;
+#endif
+}
 
 bool runtime_capture(const char *path) {
-    if (!input.pixels)
+    const uint16_t *capture = runtime_pixels();
+    if (!capture)
         return false;
     FILE *file = fopen(path, "wb");
     if (!file)
@@ -126,7 +156,7 @@ bool runtime_capture(const char *path) {
     for (int y = 0; y < RUNTIME_SCREEN_HEIGHT && ok; y++) {
         unsigned char row[RUNTIME_SCREEN_WIDTH * 3];
         for (int x = 0; x < RUNTIME_SCREEN_WIDTH; x++) {
-            unsigned value = input.pixels[y * RUNTIME_SCREEN_WIDTH + x];
+            unsigned value = capture[y * RUNTIME_SCREEN_WIDTH + x];
             for (int c = 0; c < 3; c++)
                 row[x * 3 + c] = ((value >> (c * 5)) & 31) * 255 / 31;
         }
@@ -135,7 +165,11 @@ bool runtime_capture(const char *path) {
     return fclose(file) == 0 && ok;
 }
 const uint16_t *runtime_pixels(void) {
+#ifdef ARM9
+    return graphics_capture(test_pixels) ? test_pixels : NULL;
+#else
     return testing ? test_pixels : input.pixels;
+#endif
 }
 
 static void *allocate(void *context, void *pointer, size_t old, size_t size) {
@@ -183,9 +217,15 @@ static void charge_pixels(lua_State *state, unsigned count) {
 static int clear(lua_State *state) {
     uint16_t value = color(state, 1);
     charge_pixels(state, RUNTIME_SCREEN_WIDTH * RUNTIME_SCREEN_HEIGHT);
+#ifdef ARM9
+    graphics_begin();
+    graphics.clear_color = value;
+    graphics.drawing = true;
+#else
     if (input.pixels)
         for (int i = 0; i < RUNTIME_SCREEN_WIDTH * RUNTIME_SCREEN_HEIGHT; i++)
             input.pixels[i] = value;
+#endif
     return 0;
 }
 
@@ -215,10 +255,15 @@ static int rectangle(lua_State *state) {
         bottom = RUNTIME_SCREEN_HEIGHT;
     if (right > x && bottom > y)
         charge_pixels(state, (unsigned)((right - x) * (bottom - y)));
+#ifdef ARM9
+    graphics_quad(state, x, y, right - x, bottom - y, value, 0, 0, 0, 0, 0,
+                  false);
+#else
     if (input.pixels)
         for (int row = y; row < bottom; row++)
             for (int column = x; column < right; column++)
                 input.pixels[row * RUNTIME_SCREEN_WIDTH + column] = value;
+#endif
     return 0;
 }
 
@@ -250,6 +295,11 @@ static int draw_text(lua_State *state) {
             y += TEXT_GLYPH_BYTES;
             continue;
         }
+#ifdef ARM9
+        unsigned index = glyph - TEXT_FIRST_GLYPH;
+        graphics_quad(state, x, y, 8, 8, value, graphics.font_format,
+                      (index % 16) * 8, (index / 16) * 8, 8, 8, false);
+#else
         if (font)
             for (int row = 0; row < 8; row++)
                 for (int column = 0; column < 8; column++)
@@ -257,6 +307,7 @@ static int draw_text(lua_State *state) {
                              row] &
                         (1 << column))
                         pixel(x + column, y + row, value);
+#endif
         x += TEXT_GLYPH_BYTES;
     }
     return 0;
@@ -274,6 +325,9 @@ static int line(lua_State *state) {
     end_y -= runtime->camera_y;
     int dx = abs(end_x - x), dy = -abs(end_y - y);
     charge_pixels(state, (unsigned)(dx > -dy ? dx : -dy) + 1);
+#ifdef ARM9
+    graphics_line(state, x, y, end_x, end_y, value);
+#else
     int sx = x < end_x ? 1 : -1, sy = y < end_y ? 1 : -1;
     int error = dx + dy;
     while (true) {
@@ -290,6 +344,7 @@ static int line(lua_State *state) {
             y += sy;
         }
     }
+#endif
     return 0;
 }
 
@@ -376,6 +431,10 @@ static int sprite(lua_State *state) {
         }
         lua_pop(state, 1);
     }
+#ifdef ARM9
+    image->texture = graphics_texture(state, image->pixels, image->width,
+                                      image->height, false);
+#endif
     return 1;
 }
 
@@ -390,6 +449,11 @@ static int draw_sprite(lua_State *state) {
     bool flip = lua_toboolean(state, 5);
     charge_pixels(state,
                   image->width * image->height * (unsigned)(scale * scale));
+#ifdef ARM9
+    graphics_quad(state, x, y, image->width * scale, image->height * scale,
+                  0xffff, image->texture, 0, 0, image->width, image->height,
+                  flip);
+#else
     for (unsigned row = 0; row < image->height; row++)
         for (unsigned column = 0; column < image->width; column++) {
             uint16_t value =
@@ -402,6 +466,7 @@ static int draw_sprite(lua_State *state) {
                     pixel(x + (int)column * (int)scale + dx,
                           y + (int)row * (int)scale + dy, value);
         }
+#endif
     return 0;
 }
 
@@ -811,6 +876,17 @@ static bool call(Runtime *runtime, const char *name, bool delta) {
 }
 
 static int initialize(lua_State *state) {
+#ifdef ARM9
+    if (!graphics.font_format && font) {
+        static uint16_t atlas[128 * 128];
+        for (unsigned glyph = 0; glyph < TEXT_GLYPHS; glyph++)
+            for (unsigned y = 0; y < 8; y++)
+                for (unsigned x = 0; x < 8; x++)
+                    atlas[((glyph / 16) * 8 + y) * 128 + (glyph % 16) * 8 + x] =
+                        (font[glyph * 8 + y] & (1 << x)) ? 0xffff : 0;
+        graphics.font_format = graphics_texture(state, atlas, 128, 128, true);
+    }
+#endif
     const luaL_Reg functions[] = {{"clear", clear},
                                   {"rect", rectangle},
                                   {"text", draw_text},
@@ -909,6 +985,10 @@ static int initialize(lua_State *state) {
 }
 
 static bool start(const char *code, unsigned seed, bool test) {
+#ifdef ARM9
+    uint16_t previous_clear_color = graphics.clear_color;
+    graphics_begin();
+#endif
     Runtime candidate = {.seed = seed};
     candidate.state = lua_newstate(allocate, &candidate);
     if (!candidate.state) {
@@ -931,10 +1011,18 @@ static bool start(const char *code, unsigned seed, bool test) {
                  message ? message : "Non-text Lua error");
         log_message(error);
         lua_close(state);
+#ifdef ARM9
+        graphics_release(&candidate);
+        graphics.clear_color = previous_clear_color;
+#endif
         return false;
     }
     if (!call(&candidate, "init", false)) {
         lua_close(state);
+#ifdef ARM9
+        graphics_release(&candidate);
+        graphics.clear_color = previous_clear_color;
+#endif
         return false;
     }
     runtime_stop();
@@ -946,11 +1034,26 @@ static bool start(const char *code, unsigned seed, bool test) {
     lua_setallocf(state, allocate, &active);
     error[0] = 0;
     log_message("Program started");
+#ifdef ARM9
+    graphics_finish();
+#endif
     return true;
 }
 
 bool runtime_start(const char *code) { return start(code, 1, false); }
 bool runtime_start_test(const char *code, unsigned seed) {
+#ifdef ARM9
+    RuntimeInput previous_input = input;
+    unsigned previous_frames = frame_count;
+    input = (RuntimeInput){0};
+    frame_count = 0;
+    if (!start(code, seed, true)) {
+        input = previous_input;
+        frame_count = previous_frames;
+        return false;
+    }
+    return true;
+#else
     uint16_t *candidate_pixels =
         calloc(RUNTIME_SCREEN_WIDTH * RUNTIME_SCREEN_HEIGHT, sizeof(uint16_t));
     if (!candidate_pixels) {
@@ -972,9 +1075,13 @@ bool runtime_start_test(const char *code, unsigned seed) {
     free(candidate_pixels);
     input.pixels = test_pixels;
     return true;
+#endif
 }
 
 void runtime_stop(void) {
+#ifdef ARM9
+    graphics_release(&active);
+#endif
     if (active.peak_memory > peak_memory)
         peak_memory = active.peak_memory;
     cJSON_Delete(active.temporary_json);
@@ -994,6 +1101,9 @@ static void frame(RuntimeInput value) {
     if (!active.state)
         return;
     mesh_clear_depth = true;
+#ifdef ARM9
+    graphics_begin();
+#endif
     uint64_t before = microseconds();
     if (active.state &&
         (!call(&active, "update", true) || !call(&active, "draw", false))) {
@@ -1003,6 +1113,10 @@ static void frame(RuntimeInput value) {
     }
     if (active.state)
         audio_frame();
+#ifdef ARM9
+    if (active.state)
+        graphics_finish();
+#endif
     frame_count++;
     last_frame_us = (unsigned)(microseconds() - before);
     if (last_frame_us > peak_frame_us)
@@ -1013,8 +1127,10 @@ static void frame(RuntimeInput value) {
 
 void runtime_frame(RuntimeInput value) {
     if (testing) {
+#ifndef ARM9
         if (value.pixels)
             memcpy(value.pixels, test_pixels, sizeof(test_pixels));
+#endif
         return;
     }
     frame(value);
@@ -1055,6 +1171,25 @@ cJSON *runtime_inspect(void) {
     if (active.peak_memory > peak_memory)
         peak_memory = active.peak_memory;
     cJSON *result = cJSON_CreateObject();
+#ifdef ARM9
+    cJSON_AddStringToObject(result, "renderer", "nds-gpu");
+    cJSON_AddNumberToObject(result, "gpu_polygons", graphics.polygons);
+    cJSON_AddNumberToObject(result, "gpu_vertices", graphics.vertices);
+    cJSON_AddNumberToObject(result, "texture_bytes", active.texture_bytes);
+    cJSON *platform = cJSON_AddObjectToObject(result, "platform");
+    cJSON_AddNumberToObject(platform, "loop_us", platform_metrics.loop_us);
+    cJSON_AddNumberToObject(platform, "work_us", platform_metrics.work_us);
+    cJSON_AddNumberToObject(platform, "display_us",
+                            platform_metrics.display_us);
+    cJSON_AddNumberToObject(platform, "ui_us", platform_metrics.ui_us);
+    cJSON_AddNumberToObject(platform, "agent_us", platform_metrics.agent_us);
+    cJSON_AddNumberToObject(platform, "display_bytes",
+                            platform_metrics.display_bytes);
+    cJSON_AddNumberToObject(platform, "missed_vblanks",
+                            platform_metrics.missed_vblanks);
+#else
+    cJSON_AddStringToObject(result, "renderer", "host-reference");
+#endif
     cJSON_AddBoolToObject(result, "running", runtime_running());
     cJSON_AddBoolToObject(result, "testing", testing);
     cJSON_AddNumberToObject(result, "frames", frame_count);

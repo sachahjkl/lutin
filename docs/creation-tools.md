@@ -74,19 +74,31 @@ Each read reserves 8 KiB of that budget before accessing storage. Writes charge 
 The font covers ASCII, Latin-1 accented letters, and `Œ`/`œ`.
 Common combining accents are composed during decoding. Unsupported characters render as `?` instead of disappearing.
 
-## Software 3D
+## Hardware rendering
 
 `ds.mesh(vertices, faces)` compiles up to 256 vertices and 256 triangles.
 Each vertex is `{x, y, z}`. Each face is `{first, second, third, 0xRRGGBB}`, with one-based indices.
 `ds.draw_mesh(mesh, x, y, z, yaw)` places and rotates a mesh about its Y axis.
 `ds.camera3d(x, y, z, yaw, pitch)` sets the view; angles are radians.
 Positive Z points forward. Positive Y points upward.
-The renderer clips against a 0.25-unit near plane and uses a 160-pixel focal length.
+The renderer clips against planes at 0.25 and 128 camera units and uses a 160-pixel focal length.
 Triangles have flat colors and depth testing. There are no textures or lighting APIs in this version.
 
-This is a native CPU renderer into the existing framebuffer, not the DSi hardware 3D engine.
-It shares the creation drawing budget. Keep scenes small and inspect frame timings.
-Its fixed scratch area holds transformed vertices and the depth buffer without per-frame allocation.
+The console uses the DS geometry engine for meshes and textured 2D primitives.
+The host uses a software reference renderer for logic and sanitizer checks.
+`inspect_runtime().renderer` distinguishes `nds-gpu` from `host-reference`.
+Ordinary mesh triangles use hardware object/view transformations. CPU near/far clipping handles boundary triangles.
+Projection, viewport clipping, rasterization, and depth testing run on hardware.
+
+Sprite textures occupy a program-owned VRAM arena. The font uses a shared texture atlas.
+Draw the 2D background, then meshes, then the 2D HUD.
+Draw complete frames; frames without draw commands retain the last submitted image.
+`ds.clear()` replaces earlier commands in the current frame.
+See [Hardware rendering](hardware-rendering.md) for VRAM ownership and geometry/texture budgets.
+
+`last_frame_us` measures CPU work and command submission, not total presentation latency.
+Console inspection also reports the last completed main-loop timing, display-transfer bytes, and skipped VBlanks in `platform`.
+These include UI and agent work. Test stepping intentionally holds the main-loop consumer while advancing test frames.
 
 ## Checkpoints
 

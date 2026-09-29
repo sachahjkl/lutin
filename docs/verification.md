@@ -139,10 +139,31 @@ It then requires real emulated RIGHT/A input to change creation state while fram
 The freeze regression confirms that a stopped main loop cannot pass that gameplay check.
 
 The videos display `REPLAY` and use DS-mode emulation.
-The 3D renderer uses CPU rasterization. These results do not measure physical-DSi performance.
+The v0.6.0 3D renderer used CPU rasterization. These results do not measure physical-DSi performance.
 For the tested scene, the sampled DS-mode emulator frame time changed from 1,077,261 µs to 83,994 µs after rasterizer optimization.
 This is one scene sample, not a guaranteed frame rate. The optimized run also recorded a 523,444 µs peak.
 The final emulator logs report `E2E PLAY PASS` for both movement and A-button interaction.
+
+## Hardware renderer, v0.7.0
+
+The console uses the DS geometry engine for 2D primitives and 3D meshes.
+Host tests retain the software reference renderer.
+`hardware-emulator` checks pixels read through native display capture, including sprite transparency, layering, mesh depth, font glyphs, and clipping.
+It also checks startup rollback, seeded startup state, geometry limits with clipping expansion, and VRAM cleanup after failed allocation.
+
+The renderer review found missing clear-color rollback and missing clipping-expansion accounting.
+A follow-up review found that removing the test framebuffer also removed the seeded startup input/time reset.
+The hardware test includes regressions for these defects.
+
+The same recorded 2D/3D agent sessions now execute against the GPU backend in the emulator.
+The `REPLAY GPU` label identifies this backend; historical conversation text still describes the earlier software renderer.
+The gameplay observer still requires input-driven state changes and continued frame progression.
+The freeze and inspection-failure regressions remain required checks.
+
+An intermediate optimized run sampled 6,168 µs of 3D CPU frame work, compared with 83,994 µs in v0.6.0.
+Its last completed main loop took 16,711 µs, including 6,298 µs of active work.
+That loop copied zero console-map bytes and skipped zero VBlanks.
+These are DS-mode emulator samples from one scene, not physical-console measurements or guaranteed frame rates.
 
 ## Physical-console feedback
 

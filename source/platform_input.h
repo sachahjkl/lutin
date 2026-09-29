@@ -4,8 +4,10 @@
 #include <nds.h>
 
 static InputBuffer input_buffer;
+static volatile unsigned platform_vblanks;
 
 static void sample_input(void) {
+    platform_vblanks++;
     scanKeys();
     touchPosition touch = {0};
     touchRead(&touch);

@@ -21,6 +21,9 @@ static cJSON *journal;
 static char filename[40];
 static char status[160] = "Agent idle";
 static char text[2048];
+static size_t text_used;
+static unsigned chat_revision;
+unsigned agent_chat_revision(void) { return chat_revision; }
 static bool active;
 static bool completed;
 static bool paused = true;
@@ -139,15 +142,19 @@ static const char instructions[] =
     "data during live execution, not test mode; "
     "ds.load_save() returns it or nil. Save-data access is limited to four "
     "operations and 16 KiB per callback; each read counts as 8 KiB. "
-    "For software-rendered 3D, ds.mesh(vertices,faces) accepts up to 256 "
+    "For 3D, ds.mesh(vertices,faces) accepts up to 256 "
     "vertices {x,y,z} and 256 faces {i,j,k,color}. "
     "Indices are one-based. ds.draw_mesh(mesh,x,y,z,yawRadians) renders "
     "depth-tested flat-color triangles; positive Z is forward, positive Y is "
     "up. "
     "ds.camera3d(x,y,z,yawRadians,pitchRadians) controls the view. Near plane "
-    "is 0.25, focal length 160 pixels. "
-    "Use small low-poly scenes; this uses the CPU framebuffer, not the DS 3D "
-    "engine. "
+    "is 0.25, far plane is 128, focal length is 160 pixels. "
+    "The console uses the DS geometry engine for 2D and 3D; host tests use a "
+    "software reference renderer. Draw complete frames: clear, 2D background, "
+    "meshes, then 2D HUD. Each 2D phase permits 512 primitives including text "
+    "glyphs. Each frame permits 6144 reserved vertices: 9 per triangle and "
+    "10 per quad, including clipping allowance. Each program permits 128 "
+    "sprite textures and 96 KiB of texture data with power-of-two dimensions. "
     "ds.sound('square' or 'noise',notes) compiles 1..128 notes, each "
     "{frequencyHz,durationFrames,volume}. "
     "Frequency is 0 for rest or 32..16000; duration is 1..3600 frames at 60Hz; "
@@ -183,6 +190,7 @@ static const char *string(cJSON *object, const char *name) {
 }
 
 static bool persist(void) {
+    chat_revision++;
     char *data = cJSON_PrintUnformatted(session);
     bool ok = false;
     if (!data)
@@ -270,6 +278,7 @@ static bool save_interruption(void) {
 }
 
 void agent_stop(void) {
+    chat_revision++;
     network_stop();
     active = false;
     paused = true;
@@ -394,6 +403,7 @@ static bool open_session(unsigned number) {
 }
 
 bool agent_open(unsigned number) {
+    chat_revision++;
     if (!agent_close())
         return false;
     cJSON *previous = session;
@@ -514,8 +524,15 @@ static void event(const char *data) {
     const char *type = string(object, "type");
     if (strcmp(type, "response.output_text.delta") == 0) {
         const char *delta = string(object, "delta");
-        size_t length = strlen(text);
-        snprintf(text + length, sizeof(text) - length, "%s", delta);
+        if (!text[0])
+            text_used = 0;
+        size_t length = strlen(delta);
+        if (length > sizeof(text) - text_used - 1)
+            length = sizeof(text) - text_used - 1;
+        memcpy(text + text_used, delta, length);
+        text_used += length;
+        text[text_used] = 0;
+        chat_revision++;
     }
     if (strcmp(type, "response.completed") == 0) {
         cJSON *response = cJSON_GetObjectItemCaseSensitive(object, "response");
@@ -606,6 +623,7 @@ static bool request(void) {
     char *encoded = cJSON_PrintUnformatted(body);
     cJSON_Delete(body);
     text[0] = 0;
+    chat_revision++;
     completed = false;
     cJSON_Delete(outputs);
     outputs = cJSON_CreateArray();

@@ -83,10 +83,14 @@ static unsigned menu_index, project = 1, session_number = 1;
 static unsigned chat_scroll, source_scroll, queue_index;
 static int editing_queue = -1;
 static char prompt[1024], code[32769], message[160];
-static uint16_t frame_pixels[256 * 192];
 static unsigned char extended_font[TEXT_GLYPHS * TEXT_GLYPH_BYTES];
 static PrintConsole top_console, bottom_console;
 static uint16_t top_map[32 * 32], bottom_map[32 * 32];
+static uint16_t presented_top[32 * 32], presented_bottom[32 * 32];
+static bool top_dirty = true, bottom_dirty = true;
+static unsigned profile_time(void) {
+    return (unsigned)(systemCounterGetTicks() * 1000000 / (BUS_CLOCK / 64));
+}
 static int program_background;
 static const char *menu_items[] = {"Keyboard",
                                    "Preview",
@@ -272,8 +276,18 @@ static void render_top(bool storage) {
                                : "STOP");
     consoleSetColor(&top_console, CONSOLE_YELLOW);
     page_text(agent_status(), 2);
-    ChatPage page;
-    chat_page(&page, chat_scroll, tools_expanded);
+    static ChatPage page;
+    static bool cached, cached_tools;
+    static unsigned cached_revision, cached_scroll;
+    unsigned revision = agent_chat_revision();
+    if (!cached || revision != cached_revision ||
+        chat_scroll != cached_scroll || tools_expanded != cached_tools) {
+        chat_page(&page, chat_scroll, tools_expanded);
+        cached = true;
+        cached_revision = revision;
+        cached_scroll = chat_scroll;
+        cached_tools = tools_expanded;
+    }
     if (!page.total) {
         consoleSetCursor(&top_console, 0, 4);
         consoleSetColor(&top_console, CONSOLE_GREEN);
@@ -416,16 +430,16 @@ int main(void) {
     defaultExceptionHandler();
     systemCounterSetup();
     setvbuf(stdout, NULL, _IONBF, 0);
-    videoSetMode(MODE_5_2D);
+    videoSetMode(MODE_0_3D);
     videoSetModeSub(MODE_0_2D);
-    vramSetBankA(VRAM_A_MAIN_BG);
-    vramSetBankB(VRAM_B_MAIN_BG);
+    vramSetBankA(VRAM_A_TEXTURE_SLOT0);
+    vramSetBankB(VRAM_B_TEXTURE_SLOT1);
     vramSetBankC(VRAM_C_SUB_BG);
+    vramSetBankD(VRAM_D_LCD);
+    vramSetBankE(VRAM_E_MAIN_BG);
     lcdMainOnBottom();
-    program_background = bgInit(3, BgType_Bmp16, BgSize_B16_256x256, 4, 0);
-    uint16_t *pixels = bgGetGfxPtr(program_background);
-    for (unsigned i = 0; i < 256 * 192; i++)
-        frame_pixels[i] = RGB15(2, 4, 6) | BIT(15);
+    program_background = 0;
+    runtime_graphics_init();
     consoleInit(&top_console, 0, BgType_Text4bpp, BgSize_T_256x256, 31, 0,
                 false, true);
     text_extend_font(extended_font, top_console.font.gfx);
@@ -434,7 +448,7 @@ int main(void) {
     creation_font.numChars = TEXT_GLYPHS;
     consoleSetFont(&top_console, &creation_font);
     runtime_set_font(extended_font);
-    consoleInit(&bottom_console, 0, BgType_Text4bpp, BgSize_T_256x256, 31, 0,
+    consoleInit(&bottom_console, 2, BgType_Text4bpp, BgSize_T_256x256, 31, 0,
                 true, true);
     consoleSetFont(&bottom_console, &creation_font);
     /* Keyboard tiles occupy 0x4000..0xab80; keep both map blocks above them. */
@@ -472,14 +486,30 @@ int main(void) {
     layout();
     unsigned frames = 0;
     bool running = true;
+    unsigned previous_vblank = platform_vblanks;
     while (running) {
+        unsigned loop_start = profile_time();
         platform_wait_frame();
-        DC_FlushRange(frame_pixels, sizeof(frame_pixels));
-        dmaCopy(frame_pixels, pixels, sizeof(frame_pixels));
-        DC_FlushRange(top_map, sizeof(top_map));
-        DC_FlushRange(bottom_map, sizeof(bottom_map));
-        dmaCopy(top_map, top_vram, sizeof(top_map));
-        dmaCopy(bottom_map, bottom_vram, sizeof(bottom_map));
+        unsigned work_start = profile_time(), vblank = platform_vblanks;
+        RuntimePlatformMetrics metrics = {0};
+        metrics.missed_vblanks =
+            vblank - previous_vblank > 1 ? vblank - previous_vblank - 1 : 0;
+        previous_vblank = vblank;
+        if (top_dirty) {
+            DC_FlushRange(top_map, sizeof(top_map));
+            dmaCopy(top_map, top_vram, sizeof(top_map));
+            memcpy(presented_top, top_map, sizeof(top_map));
+            metrics.display_bytes += sizeof(top_map);
+            top_dirty = false;
+        }
+        if (bottom_dirty && (modal || (view != PREVIEW && view != PLAY))) {
+            DC_FlushRange(bottom_map, sizeof(bottom_map));
+            dmaCopy(bottom_map, bottom_vram, sizeof(bottom_map));
+            memcpy(presented_bottom, bottom_map, sizeof(bottom_map));
+            metrics.display_bytes += sizeof(bottom_map);
+            bottom_dirty = false;
+        }
+        metrics.display_us = profile_time() - work_start;
         InputSample sample = platform_input_take();
         unsigned pressed = sample.pressed, held = sample.held;
         touchPosition touch = {.px = sample.touch_x, .py = sample.touch_y};
@@ -668,9 +698,9 @@ int main(void) {
         InputSample game = platform_input_game(sample, play);
         if (held & KEY_TOUCH)
             touchRead(&touch);
-        runtime_frame((RuntimeInput){frame_pixels, game.held, game.pressed,
-                                     touch.px, touch.py,
-                                     (game.held & KEY_TOUCH) != 0});
+        runtime_frame((RuntimeInput){NULL, game.held, game.pressed, touch.px,
+                                     touch.py, (game.held & KEY_TOUCH) != 0});
+        unsigned agent_start = profile_time();
         if (catalog_updating) {
             /* Present the update screen before the first network call. */
             if (catalog_was_updating)
@@ -688,10 +718,19 @@ int main(void) {
             }
         } else if (editing_queue < 0 && !pressed)
             agent_tick();
+        metrics.agent_us = profile_time() - agent_start;
+        unsigned ui_start = profile_time();
         if (frames++ % 6 == 0 || pressed) {
             render_top(storage);
             render_bottom();
+            top_dirty = memcmp(top_map, presented_top, sizeof(top_map)) != 0;
+            bottom_dirty =
+                memcmp(bottom_map, presented_bottom, sizeof(bottom_map)) != 0;
         }
+        metrics.ui_us = profile_time() - ui_start;
+        metrics.work_us = profile_time() - work_start;
+        metrics.loop_us = profile_time() - loop_start;
+        runtime_platform_metrics(metrics);
     }
     runtime_stop();
     agent_stop();

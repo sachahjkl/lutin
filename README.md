@@ -51,7 +51,7 @@ Saved programs also work offline. Lutin supports games, animations, drawing tool
 - **Steer and Queue:** redirect the current task or save requests for later.
 - **Local execution:** draw shapes and text, read buttons and touch input, and inspect Lua errors.
 - **Generated assets:** editable pixel sprites, animation frames, synthesized music, and sound effects. See [asset APIs](docs/assets.md).
-- **Reusable APIs:** tilemaps, camera movement, animation, modules, save data, and bounded software 3D. See [creation tools](docs/creation-tools.md).
+- **Reusable APIs:** tilemaps, camera movement, animation, modules, save data, and hardware-rendered 3D. See [creation tools](docs/creation-tools.md).
 - **Input capture:** sample buttons at VBlank and retain short presses across a busy main-loop iteration.
 - **Visible progress:** Wi-Fi state, transport stage, elapsed time, and received bytes.
 - **Reproducible builds:** a pinned Nix environment, sanitizer tests, and emulator checks.

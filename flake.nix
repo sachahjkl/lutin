@@ -65,7 +65,7 @@
     };
     rom = pkgs.blocksdsNix.stdenvBlocksdsSlim.mkDerivation {
       pname = "lutin";
-      version = "0.5.4";
+      version = "0.6.0";
       src = source;
       nativeBuildInputs = [pkgs.gnumake];
       LUA_SOURCE = luaSource;
@@ -98,6 +98,22 @@
       };
       makeFlags = ["NETWORK_SOURCE=tests/presentation/network.c"];
     });
+    creationReplayRom = presentationRom.overrideAttrs (_: {
+      pname = "lutin-creation-replay";
+      src = pkgs.lib.fileset.toSource {
+        root = ./.;
+        fileset = pkgs.lib.fileset.unions [./Makefile ./source ./tests/presentation/network.c ./tests/demos/observe.c];
+      };
+      postPatch = "cp tests/demos/observe.c source/observe-test.c";
+      LDFLAGS = "-Wl,--wrap=tools_call,--wrap=agent_tick,--wrap=runtime_frame";
+    });
+    creationReplayCheck = name: fixtures:
+      pkgs.runCommand "lutin-${name}-e2e" {
+        nativeBuildInputs = emulatorTools ++ [pkgs.ffmpeg-full];
+        FONTCONFIG_FILE = pkgs.makeFontsConf {fontDirectories = [pkgs.dejavu_fonts];};
+      } ''
+        bash ${./scripts/record-creation.sh} ${creationReplayRom}/lutin.nds ${fixtures} "$out" ${./tests/melonds.toml} ${./catalog/models.json}
+      '';
     installationKit = import ./nix/installation-kit.nix {inherit pkgs rom;};
     releaseKit = pkgs.runCommand "lutin-sd-kit" {} ''
       mkdir -p "$out/roms/nds" "$out/lutin/projects/1" "$out/lutin/keys"
@@ -119,40 +135,44 @@
       pkgs.runCommand "lutin-runtime-check" {
         nativeBuildInputs = [pkgs.stdenv.cc];
       } ''
-          cc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -g -I${luaSource}/src -I${./source} \
-            ${./tests/runtime.c} ${./source/runtime.c} ${luaSource}/src/*.c -lm -o test-runtime
+          cc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -g -I${luaSource}/src -I${./source} -I${jsonSource}/embedded \
+            ${./tests/runtime.c} ${./source/runtime.c} ${jsonSource}/embedded/cJSON.c ${luaSource}/src/*.c -lm -o test-runtime
         timeout 10 ./test-runtime
           touch "$out"
       '';
     agentCheck =
       pkgs.runCommand "lutin-agent-check" {
         nativeBuildInputs = [pkgs.stdenv.cc];
+        buildInputs = [pkgs.zlib];
       } ''
-          cc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -g -I${luaSource}/src -I${jsonSource}/embedded -I${./source} \
-            ${./tests/agent.c} ${./tests/fat-rename.c} -Wl,--wrap=rename ${./source/agent.c} ${./source/tools.c} ${./source/workspace.c} \
-            ${./source/backend.c} ${./source/config.c} ${./source/runtime.c} ${luaSource}/src/*.c ${jsonSource}/embedded/cJSON.c -lm -o test-agent
+          cc -std=c11 -DLUA_USE_APICHECK -Wall -Wextra -Werror -fsanitize=address,undefined -g -I${luaSource}/src -I${jsonSource}/embedded -I${./source} \
+            ${./tests/agent.c} ${./tests/fat-rename.c} -Wl,--wrap=rename ${./source/agent.c} ${./source/tools.c} ${./source/image.c} ${./source/workspace.c} \
+            ${./source/backend.c} ${./source/config.c} ${./source/runtime.c} ${luaSource}/src/*.c ${jsonSource}/embedded/cJSON.c -lz -lm -o test-agent
         cp ${./tests/catalog.json} models.json
         timeout 10 ./test-agent
           touch "$out"
       '';
     liveAgent =
       pkgs.runCommand "lutin-live-agent" {
-        nativeBuildInputs = [pkgs.stdenv.cc];
-        buildInputs = [pkgs.curl];
+        nativeBuildInputs = [pkgs.stdenv.cc pkgs.binutils pkgs.xxd];
+        buildInputs = [pkgs.curl pkgs.zlib];
       } ''
         mkdir -p "$out/bin"
+        ar p ${blocksds}/opt/wonderful/thirdparty/blocksds/core/libs/libnds/lib/libnds9.a default_font.png.o > font.o
+        objcopy -I elf32-little -O binary font.o font.bin
+        xxd -i -n default_font font.bin > font.h
         cc -std=c11 -D_POSIX_C_SOURCE=200809L -DCJSON_NESTING_LIMIT=64 -Wall -Wextra -Werror \
-          -I${luaSource}/src -I${jsonSource}/embedded -I${./source} -I${./tests/support} \
-          ${./tests/live-agent.c} ${./source/agent.c} ${./source/tools.c} ${./source/workspace.c} \
+          -I. -I${luaSource}/src -I${jsonSource}/embedded -I${./source} -I${./tests/support} \
+          ${./tests/live-agent.c} ${./source/agent.c} ${./source/tools.c} ${./source/image.c} ${./source/workspace.c} \
           ${./source/backend.c} ${./source/config.c} ${./source/runtime.c} ${./source/network.c} ${./source/resolver.c} ${./source/sse.c} ${./source/protocol.c} \
-          ${luaSource}/src/*.c ${jsonSource}/embedded/cJSON.c -pthread -lcurl -lm -o "$out/bin/live-agent"
+          ${luaSource}/src/*.c ${jsonSource}/embedded/cJSON.c -Wl,--wrap=network_start -pthread -lcurl -lz -lm -o "$out/bin/live-agent"
       '';
     workspaceCheck =
       pkgs.runCommand "lutin-workspace-check" {
         nativeBuildInputs = [pkgs.stdenv.cc];
       } ''
-        cc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -g -I${./source} \
-          ${./tests/workspace.c} ${./source/workspace.c} \
+        cc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -g -I${./source} -I${jsonSource}/embedded \
+          ${./tests/workspace.c} ${./source/workspace.c} ${jsonSource}/embedded/cJSON.c \
           -Wl,--wrap=rename,--wrap=fwrite,--wrap=fclose,--wrap=unlink -o test-workspace
         timeout 10 ./test-workspace
         touch "$out"
@@ -236,6 +256,22 @@
       postPatch = "cp tests/network-sockets.c source/main.c";
       LDFLAGS = "-Wl,--wrap=Wifi_AssocStatus,--wrap=getaddrinfo,--wrap=connect";
     });
+    keyboardTestRom = rom.overrideAttrs (_: {
+      pname = "lutin-keyboard-test";
+      src = pkgs.lib.fileset.toSource {
+        root = ./.;
+        fileset = pkgs.lib.fileset.unions [./Makefile ./source ./tests/keyboard.c];
+      };
+      postPatch = "cp tests/keyboard.c source/keyboard-test.c";
+      LDFLAGS = "-Wl,--wrap=keyboardInit_call,--wrap=keyboardUpdate";
+    });
+    keyboardEmulatorCheck =
+      pkgs.runCommand "lutin-keyboard-emulator-check" {
+        nativeBuildInputs = emulatorTools;
+        FONTCONFIG_FILE = pkgs.makeFontsConf {fontDirectories = [pkgs.dejavu_fonts];};
+      } ''
+        bash ${./scripts/check-keyboard-emulator.sh} ${keyboardTestRom}/lutin.nds "$out" ${./tests/melonds.toml} ${./tests/catalog.json}
+      '';
     socketEmulatorCheck =
       pkgs.runCommand "lutin-socket-emulator-check" {
         nativeBuildInputs = emulatorTools;
@@ -256,6 +292,7 @@
       excludes = [
         "^\\.specify/(scripts|templates|integrations|workflows)/"
         "^\\.opencode/commands/speckit\\."
+        "^tests/demos/(2d|3d)/"
       ];
       hooks = {
         alejandra.enable = true;
@@ -297,9 +334,22 @@
       network-stall-rom = networkStallRom;
       live-agent = liveAgent;
       presentation-rom = presentationRom;
+      creation-replay-rom = creationReplayRom;
       presentation = presentationCheck;
     };
     checks.${system} = {
+      creation =
+        pkgs.runCommand "lutin-creation-check" {
+          nativeBuildInputs = [pkgs.stdenv.cc];
+          buildInputs = [pkgs.zlib];
+        } ''
+          cc -std=c11 -DLUA_USE_APICHECK -Wall -Wextra -Werror -fsanitize=address,undefined -g -I${luaSource}/src -I${jsonSource}/embedded -I${./source} \
+            ${./tests/creation.c} ${./source/tools.c} ${./source/image.c} ${./source/runtime.c} ${./source/workspace.c} \
+            ${luaSource}/src/*.c ${jsonSource}/embedded/cJSON.c -Wl,--wrap=rename -lz -lm -o test-creation
+          timeout 20 ./test-creation ${./examples/playtest-platformer.lua} ${./tests/demos/platformer-test.lua}
+          mkdir -p "$out"
+          cp work/projects/1/capture-*.png "$out/"
+        '';
       catalog = pkgs.runCommand "lutin-catalog-check" {nativeBuildInputs = [pkgs.stdenv.cc pkgs.python3];} ''
         cp ${./tests/catalog.json} models.json
         chmod u+w models.json
@@ -317,13 +367,41 @@
         cp ${./examples/media.lua} projects/1/main.lua
         cp ${./examples/hero.lua} projects/1/hero.lua
         cp ${./examples/sounds.lua} projects/1/sounds.lua
-        cc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -g -I${luaSource}/src -I${./source} \
-          ${./tests/media.c} ${./source/runtime.c} ${./source/workspace.c} ${luaSource}/src/*.c -lm -o test-media
+        cc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -g -I${luaSource}/src -I${./source} -I${jsonSource}/embedded \
+          ${./tests/media.c} ${./source/runtime.c} ${./source/workspace.c} ${jsonSource}/embedded/cJSON.c ${luaSource}/src/*.c -lm -o test-media
         timeout 10 ./test-media
         touch "$out"
       '';
       reproducible-rom = reproducibleRomCheck;
+      creation-replay-rom = creationReplayRom;
       presentation-rom = presentationRom;
+      creation-2d-e2e = creationReplayCheck "2d" ./tests/demos/2d;
+      creation-3d-e2e = creationReplayCheck "3d" ./tests/demos/3d;
+      creation-freeze-e2e =
+        pkgs.runCommand "lutin-freeze-e2e" {
+          nativeBuildInputs = emulatorTools ++ [pkgs.ffmpeg-full];
+          FONTCONFIG_FILE = pkgs.makeFontsConf {fontDirectories = [pkgs.dejavu_fonts];};
+        } ''
+          if LUTIN_TEST_FREEZE=1 bash ${./scripts/record-creation.sh} ${creationReplayRom}/lutin.nds ${./tests/demos/2d} "$out" ${./tests/melonds.toml} ${./catalog/models.json} > freeze.log 2>&1; then
+            echo "The E2E check accepted frozen gameplay." >&2
+            exit 1
+          fi
+          grep -q "E2E gameplay did not advance" freeze.log
+          cp freeze.log "$out/"
+        '';
+      creation-inspection-e2e =
+        pkgs.runCommand "lutin-inspection-e2e" {
+          nativeBuildInputs = emulatorTools ++ [pkgs.ffmpeg-full];
+          FONTCONFIG_FILE = pkgs.makeFontsConf {fontDirectories = [pkgs.dejavu_fonts];};
+        } ''
+          if LUTIN_TEST_INSPECTION=1 bash ${./scripts/record-creation.sh} ${creationReplayRom}/lutin.nds ${./tests/demos/2d} "$out" ${./tests/melonds.toml} ${./catalog/models.json} > inspection.log 2>&1; then
+            echo "The E2E check accepted missing inspection state." >&2
+            exit 1
+          fi
+          grep -q "E2E PLAY FAIL inspection unavailable" "$out/emulator.log"
+          if grep -q "E2E PLAY PASS" "$out/emulator.log"; then exit 1; fi
+          cp inspection.log "$out/"
+        '';
       presentation = presentationCheck;
       workflows = pkgs.runCommand "lutin-workflow-check" {nativeBuildInputs = [pkgs.actionlint pkgs.shellcheck];} ''
         actionlint ${./.github/workflows/ci.yml}
@@ -353,6 +431,7 @@
       emulator = emulatorCheck;
       network-emulator = networkEmulatorCheck;
       socket-emulator = socketEmulatorCheck;
+      keyboard-emulator = keyboardEmulatorCheck;
       pre-commit = preCommitCheck;
       runtime = runtimeCheck;
       agent = agentCheck;
@@ -375,6 +454,8 @@
           pkgs.gnumake
           pkgs.python3
           pkgs.git
+          pkgs.sops
+          pkgs.age
           pkgs.curl
           pkgs.jq
           pkgs._7zz

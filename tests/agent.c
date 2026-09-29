@@ -94,6 +94,18 @@ int main(void) {
     assert(runtime_running());
     assert(agent_busy());
     assert(strstr(request_body, "Program started"));
+    uint16_t pixels[RUNTIME_SCREEN_WIDTH * RUNTIME_SCREEN_HEIGHT] = {0};
+    runtime_frame((RuntimeInput){.pixels = pixels});
+    complete("return tools.capture_screen()", "vision-1");
+    assert(strstr(request_body, "input_image") &&
+           strstr(request_body, "data:image/png;base64,"));
+    char *vision_session = workspace_read("session-1.json", 196608);
+    assert(vision_session && strstr(vision_session, "capture-1.png") &&
+           !strstr(vision_session, "base64"));
+    free(vision_session);
+    complete("error('capture must not replay')", "vision-1");
+    assert(workspace_missing("capture-2.png"));
+    assert(strstr(request_body, "data:image/png;base64,"));
     assert(agent_submit("Next task", false));
     assert(agent_queue_size() == 1);
     complete(NULL, NULL);
@@ -132,7 +144,7 @@ int main(void) {
     assert(!tools_execute("while true do end", result, sizeof(result)));
     assert(tools_execute("return tools.inspect_runtime()", result,
                          sizeof(result)));
-    assert(strstr(result, "running=true"));
+    assert(strstr(result, "\"running\":true"));
     assert(agent_submit("Replay call", true));
     complete("error('must not execute again')", "call-1");
     assert(strstr(request_body, "Program started"));

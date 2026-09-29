@@ -18,21 +18,29 @@ Backlog tools were unavailable during this work. No `BACKLOG.json` was edited.
 
 ## Host checks
 
-| Check       | Coverage                                                                                                                |
-| ----------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `runtime`   | Drawing, syntax errors, invalid coordinates, instruction and memory budgets, native callback failures, and recovery.    |
-| `workspace` | Partial writes, close errors, rename failures, rollback, stale backups, blocked temporary paths, and project selection. |
-| `agent`     | Tools, versions, sessions, Queue, Steer, cancellation, interrupted results, non-replay, and model persistence.          |
-| `protocol`  | Responses and Chat Completions, fragmented arguments, reasoning, multiple calls, and output limits.                     |
-| `network`   | Wi-Fi retries, idle reconnect, DNS worker cancellation, timeout, failure, successful resolution, and request reuse.     |
-| `sse`       | Split fragments, CRLF, multiline events, and size limits.                                                               |
-| `chat`      | Bounded pagination, scrolling, recent-message tracking, and control-character filtering.                                |
-| `config`    | Defaults, model names, valid preferences, unknown keys, duplicate keys, invalid types, and oversized files.             |
-| `input`     | Press-and-release capture, one-time consumption, menu isolation, and retained touch coordinates.                        |
+| Check       | Coverage                                                                                                                                                                                     |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `runtime`   | Drawing, syntax errors, invalid coordinates, instruction and memory budgets, native callback failures, and recovery.                                                                         |
+| `workspace` | Partial writes, close errors, rename failures, rollback, stale backups, blocked temporary paths, and project selection.                                                                      |
+| `agent`     | Tools, versions, sessions, Queue, Steer, cancellation, interrupted results, non-replay, and model persistence.                                                                               |
+| `protocol`  | Responses and Chat Completions, fragmented arguments, reasoning, multiple calls, and output limits.                                                                                          |
+| `network`   | Wi-Fi retries, idle reconnect, DNS worker cancellation, timeout, failure, successful resolution, and request reuse.                                                                          |
+| `sse`       | Split fragments, CRLF, multiline events, and size limits.                                                                                                                                    |
+| `chat`      | Bounded pagination, scrolling, recent-message tracking, and control-character filtering.                                                                                                     |
+| `config`    | Defaults, model names, valid preferences, unknown keys, duplicate keys, invalid types, and oversized files.                                                                                  |
+| `input`     | Press-and-release capture, one-time consumption, menu isolation, and retained touch coordinates.                                                                                             |
+| `creation`  | Seeded input, paused frames, state inspection, budget failures, PNG captures, checkpoint recovery, modules, saves, tiles, animation, touch buttons, software triangles, and accented glyphs. |
 
 Runtime, workspace, agent, protocol, network, chat, configuration, and input checks use AddressSanitizer and UndefinedBehaviorSanitizer.
 Lua execution tests have external timeouts to detect native stalls.
 Host storage failures do not simulate physical FAT corruption from power loss.
+Creation checks also use AddressSanitizer and UndefinedBehaviorSanitizer.
+Agent tests verify image request expansion, capture non-replay, and filename-only session persistence.
+Protocol tests verify image content in both supported transports.
+
+The creation-tool review identified six defects before release.
+Regression cases cover restoration after more than 64 source files, backup-only files, and failed project selection.
+They also cover exact inspection limits, initialization-only drawing, failed test replacement, and counted save-data access.
 
 Session tests create fifteen sessions and verify pagination, reset, deletion, recreation, and failed-switch recovery.
 They verify that reset retains the selected model and project files.
@@ -48,6 +56,11 @@ This removes the filesystem-order difference observed between local and GitHub r
 It checks chat, keyboard, START menu, program launch, return from gameplay, and model selection through screen captures and OCR.
 The emulator uses isolated configuration and a writable ROM copy.
 It runs in DS mode with built-in BIOS replacements, not full DSi emulation.
+
+The `keyboard-emulator` check compares decompressed keyboard tiles with VRAM after initialization and during a real emulated touch press.
+It also saves screenshots containing accented chat text and a pressed key.
+The keyboard map starts at block 24, beyond the graphics allocation ending at `0xab80`.
+This replaces block 20, which overlapped that allocation.
 
 The scheduler probe compares BIOS VBlank waits with cooperative waits.
 The measured result was zero background executions during 90 BIOS waits and 90 during 90 cooperative waits.
@@ -106,6 +119,30 @@ The corrected run completed in 115.7 seconds:
 The two corrected failures were a missing `path` argument and a non-unique exact replacement.
 The original request asked, in French, for a Mario-style platformer level.
 These results use host networking, not emulated DSi networking.
+
+## Creation-tool sessions, 2026-09-29
+
+GPT 6 Luna created Lantern Run (2D) and Signal Garden (software 3D) through the production host agent and tools.
+Both sessions sent PNG captures as image input and recovered from model-generated code errors.
+Both reached the 32-generation limit during visual edits, then completed after an explicit completion request.
+A further targeted request corrected the 3D HUD contrast and camera pitch.
+
+- The 2D test advanced 86 seeded frames and asserted movement, light collection, jumping, and landing.
+- The 3D test asserted camera movement and an A-button mode change after 13 seeded frames.
+- Both final sessions created a working checkpoint, resumed live input, and finished with a running creation.
+
+`tests/demos/2d` and `tests/demos/3d` retain recorded responses, prior session history, and the generated source state.
+The emulator recordings begin with that source and replay the final validation or correction calls.
+They do not show a new live network request from the emulator.
+The test observer compares tool success/failure with the live recording and requires a running creation with testing disabled.
+It then requires real emulated RIGHT/A input to change creation state while frames advance.
+The freeze regression confirms that a stopped main loop cannot pass that gameplay check.
+
+The videos display `REPLAY` and use DS-mode emulation.
+The 3D renderer uses CPU rasterization. These results do not measure physical-DSi performance.
+For the tested scene, the sampled DS-mode emulator frame time changed from 1,077,261 µs to 83,994 µs after rasterizer optimization.
+This is one scene sample, not a guaranteed frame rate. The optimized run also recorded a 523,444 µs peak.
+The final emulator logs report `E2E PLAY PASS` for both movement and A-button interaction.
 
 ## Physical-console feedback
 

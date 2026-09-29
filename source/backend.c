@@ -150,8 +150,10 @@ static Catalog *validate(cJSON *root) {
                                               "providers", "models"};
     static const char *const provider_fields[] = {
         "id", "base_url", "auth_header", "session_header"};
-    static const char *const model_fields[] = {
-        "id", "name", "provider", "model", "protocol", "reasoning_effort"};
+    static const char *const model_fields[] = {"id",         "name",
+                                               "provider",   "model",
+                                               "protocol",   "reasoning_effort",
+                                               "image_input"};
     cJSON *version = cJSON_GetObjectItemCaseSensitive(root, "version");
     cJSON *providers = cJSON_GetObjectItemCaseSensitive(root, "providers");
     cJSON *models = cJSON_GetObjectItemCaseSensitive(root, "models");
@@ -201,6 +203,11 @@ static Catalog *validate(cJSON *root) {
         model->label = text(item, "name");
         model->model = text(item, "model");
         model->reasoning_effort = text(item, "reasoning_effort");
+        cJSON *image_input =
+            cJSON_GetObjectItemCaseSensitive(item, "image_input");
+        if (image_input && !cJSON_IsBool(image_input))
+            goto invalid;
+        model->image_input = cJSON_IsTrue(image_input);
         if (cJSON_HasObjectItem(item, "reasoning_effort") &&
             !identifier(model->reasoning_effort))
             goto invalid;

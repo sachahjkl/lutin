@@ -33,6 +33,8 @@ jobs:
           nix build .#emulator-check -o result-emulator
           nix build .#checks.x86_64-linux.network-emulator -o result-network-emulator
           nix build .#checks.x86_64-linux.socket-emulator -o result-socket-emulator
+          nix build .#checks.x86_64-linux.creation-2d-e2e -o result-creation-2d
+          nix build .#checks.x86_64-linux.creation-3d-e2e -o result-creation-3d
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: lutin-build
@@ -42,6 +44,8 @@ jobs:
             result-emulator/
             result-network-emulator/
             result-socket-emulator/
+            result-creation-2d/
+            result-creation-3d/
           if-no-files-found: error
 
   release:

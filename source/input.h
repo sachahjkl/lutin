@@ -15,7 +15,8 @@ enum {
     BUTTON_L = 1u << 9,
     BUTTON_X = 1u << 10,
     BUTTON_Y = 1u << 11,
-    BUTTON_TOUCH = 1u << 12
+    BUTTON_TOUCH = 1u << 12,
+    BUTTON_ALL = (BUTTON_TOUCH << 1) - 1
 };
 
 typedef struct {

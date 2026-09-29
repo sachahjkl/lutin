@@ -1,5 +1,7 @@
 #include "runtime.h"
+#include "lua_value.h"
 #include "sandbox.h"
+#include "text.h"
 #include <lauxlib.h>
 #include <lua.h>
 #include <lualib.h>
@@ -7,6 +9,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+#ifdef ARM9
+#include <nds.h>
+#endif
 
 typedef struct {
     unsigned frequency, frames, volume;
@@ -22,6 +28,11 @@ typedef struct {
     unsigned width, height;
     uint16_t pixels[];
 } Sprite;
+typedef struct {
+    unsigned width, height, tile_size;
+    unsigned char cells[];
+} Tilemap;
+enum { TILEMAP_MAX_SIZE = 64, TILEMAP_EMPTY = 255 };
 
 typedef struct {
     Sound *sound;
@@ -33,9 +44,15 @@ typedef struct {
 typedef struct {
     lua_State *state;
     size_t memory;
+    size_t peak_memory;
     unsigned instructions;
     unsigned pixels;
     unsigned asset_bytes;
+    unsigned storage_operations, storage_bytes;
+    unsigned seed;
+    int camera_x, camera_y;
+    float eye_x, eye_y, eye_z, eye_yaw, eye_pitch;
+    cJSON *temporary_json;
     Voice voices[RUNTIME_AUDIO_VOICES];
 } Runtime;
 
@@ -47,11 +64,26 @@ static char logs[16][256];
 static unsigned log_count;
 static RuntimeAssetReader asset_reader;
 static RuntimeAudio audio_output;
+static RuntimeSaveWriter save_writer;
+static bool testing;
+static unsigned test_buttons;
+static uint16_t test_pixels[RUNTIME_SCREEN_WIDTH * RUNTIME_SCREEN_HEIGHT];
+static unsigned frame_count, last_frame_us, peak_frame_us, budget_failures;
+static size_t peak_memory;
+
+static uint64_t microseconds(void) {
+#ifdef ARM9
+    return systemCounterGetTicks() * 1000000 / (BUS_CLOCK / 64);
+#else
+    return (uint64_t)clock() * 1000000 / CLOCKS_PER_SEC;
+#endif
+}
 
 void runtime_set_asset_reader(RuntimeAssetReader reader) {
     asset_reader = reader;
 }
 void runtime_set_audio(RuntimeAudio output) { audio_output = output; }
+void runtime_set_save_writer(RuntimeSaveWriter writer) { save_writer = writer; }
 
 static void log_message(const char *message) {
     snprintf(logs[log_count++ % 16], sizeof(logs[0]), "%s", message);
@@ -102,6 +134,9 @@ bool runtime_capture(const char *path) {
     }
     return fclose(file) == 0 && ok;
 }
+const uint16_t *runtime_pixels(void) {
+    return testing ? test_pixels : input.pixels;
+}
 
 static void *allocate(void *context, void *pointer, size_t old, size_t size) {
     Runtime *runtime = context;
@@ -112,11 +147,14 @@ static void *allocate(void *context, void *pointer, size_t old, size_t size) {
         runtime->memory -= old;
         return NULL;
     }
-    if (size > 2 * 1024 * 1024 - (runtime->memory - old))
+    if (size > RUNTIME_MEMORY_BYTES - (runtime->memory - old))
         return NULL;
     void *result = realloc(pointer, size);
-    if (result)
+    if (result) {
         runtime->memory = runtime->memory - old + size;
+        if (runtime->memory > runtime->peak_memory)
+            runtime->peak_memory = runtime->memory;
+    }
     return result;
 }
 
@@ -124,7 +162,7 @@ static void budget(lua_State *state, lua_Debug *debug) {
     (void)debug;
     Runtime *runtime;
     lua_getallocf(state, (void **)&runtime);
-    if (++runtime->instructions >= 100)
+    if (++runtime->instructions >= RUNTIME_INSTRUCTIONS / RUNTIME_HOOK_INTERVAL)
         luaL_error(state, "Instruction budget exceeded");
 }
 
@@ -137,7 +175,7 @@ static uint16_t color(lua_State *state, int index) {
 static void charge_pixels(lua_State *state, unsigned count) {
     Runtime *runtime;
     lua_getallocf(state, (void **)&runtime);
-    if (count > 262144 - runtime->pixels)
+    if (count > RUNTIME_PIXEL_BUDGET - runtime->pixels)
         luaL_error(state, "Drawing budget exceeded");
     runtime->pixels += count;
 }
@@ -162,6 +200,10 @@ static int rectangle(lua_State *state) {
     int x = coordinate(state, 1), y = coordinate(state, 2);
     int width = coordinate(state, 3), height = coordinate(state, 4);
     uint16_t value = color(state, 5);
+    Runtime *runtime;
+    lua_getallocf(state, (void **)&runtime);
+    x -= runtime->camera_x;
+    y -= runtime->camera_y;
     int right = x + width, bottom = y + height;
     if (x < 0)
         x = 0;
@@ -188,6 +230,10 @@ static int buttons(lua_State *state) {
 
 static int draw_text(lua_State *state) {
     int x = coordinate(state, 1), y = coordinate(state, 2);
+    Runtime *runtime;
+    lua_getallocf(state, (void **)&runtime);
+    x -= runtime->camera_x;
+    y -= runtime->camera_y;
     size_t length;
     const unsigned char *text =
         (const unsigned char *)luaL_checklstring(state, 3, &length);
@@ -195,15 +241,24 @@ static int draw_text(lua_State *state) {
     if (length > 1024)
         return luaL_error(state, "Text exceeds 1024 bytes");
     charge_pixels(state, (unsigned)length * 64);
-    if (font)
-        for (size_t i = 0; i < length; i++) {
-            if (text[i] < 32 || text[i] > 127)
-                continue;
+    const char *cursor = (const char *)text;
+    int origin = x;
+    while (*cursor) {
+        unsigned char glyph = text_next(&cursor);
+        if (glyph == '\n') {
+            x = origin;
+            y += TEXT_GLYPH_BYTES;
+            continue;
+        }
+        if (font)
             for (int row = 0; row < 8; row++)
                 for (int column = 0; column < 8; column++)
-                    if (font[(text[i] - 32) * 8 + row] & (1 << column))
-                        pixel(x + (int)i * 8 + column, y + row, value);
-        }
+                    if (font[(glyph - TEXT_FIRST_GLYPH) * TEXT_GLYPH_BYTES +
+                             row] &
+                        (1 << column))
+                        pixel(x + column, y + row, value);
+        x += TEXT_GLYPH_BYTES;
+    }
     return 0;
 }
 
@@ -211,6 +266,12 @@ static int line(lua_State *state) {
     int x = coordinate(state, 1), y = coordinate(state, 2);
     int end_x = coordinate(state, 3), end_y = coordinate(state, 4);
     uint16_t value = color(state, 5);
+    Runtime *runtime;
+    lua_getallocf(state, (void **)&runtime);
+    x -= runtime->camera_x;
+    y -= runtime->camera_y;
+    end_x -= runtime->camera_x;
+    end_y -= runtime->camera_y;
     int dx = abs(end_x - x), dy = -abs(end_y - y);
     charge_pixels(state, (unsigned)(dx > -dy ? dx : -dy) + 1);
     int sx = x < end_x ? 1 : -1, sy = y < end_y ? 1 : -1;
@@ -321,6 +382,8 @@ static int sprite(lua_State *state) {
 static int draw_sprite(lua_State *state) {
     Sprite *image = luaL_checkudata(state, 1, "lutin.sprite");
     int x = coordinate(state, 2), y = coordinate(state, 3);
+    x -= context(state)->camera_x;
+    y -= context(state)->camera_y;
     lua_Integer scale = luaL_optinteger(state, 4, 1);
     luaL_argcheck(state, scale >= 1 && scale <= RUNTIME_SPRITE_MAX_SCALE, 4,
                   "Scale must be 1..8");
@@ -340,6 +403,270 @@ static int draw_sprite(lua_State *state) {
                           y + (int)row * (int)scale + dy, value);
         }
     return 0;
+}
+
+#include "runtime_mesh.h"
+
+static int camera(lua_State *state) {
+    int x = coordinate(state, 1), y = coordinate(state, 2);
+    context(state)->camera_x = x;
+    context(state)->camera_y = y;
+    return 0;
+}
+
+static int measure_text(lua_State *state) {
+    size_t length;
+    const char *cursor = luaL_checklstring(state, 1, &length);
+    luaL_argcheck(state, length <= 1024, 1, "Text exceeds 1024 bytes");
+    unsigned width = 0, line_width = 0, height = TEXT_GLYPH_BYTES;
+    while (*cursor) {
+        if (text_next(&cursor) == '\n') {
+            if (line_width > width)
+                width = line_width;
+            line_width = 0;
+            height += TEXT_GLYPH_BYTES;
+        } else
+            line_width += TEXT_GLYPH_BYTES;
+    }
+    lua_pushinteger(state, line_width > width ? line_width : width);
+    lua_pushinteger(state, height);
+    return 2;
+}
+
+static int button(lua_State *state) {
+    int x = coordinate(state, 1), y = coordinate(state, 2);
+    int width = coordinate(state, 3), height = coordinate(state, 4);
+    size_t length;
+    luaL_checklstring(state, 5, &length);
+    luaL_argcheck(
+        state, width > 0 && height > 0 && length <= 32, 5,
+        "Button requires positive size and a label of at most 32 bytes");
+    bool inside = input.touching && input.touch_x >= x && input.touch_y >= y &&
+                  input.touch_x < x + width && input.touch_y < y + height;
+    Runtime *runtime = context(state);
+    lua_pushcfunction(state, rectangle);
+    lua_pushinteger(state, x + runtime->camera_x);
+    lua_pushinteger(state, y + runtime->camera_y);
+    lua_pushinteger(state, width);
+    lua_pushinteger(state, height);
+    lua_pushinteger(state, inside ? 0x406090 : 0x203040);
+    lua_call(state, 5, 0);
+    lua_pushcfunction(state, draw_text);
+    lua_pushinteger(state, x + runtime->camera_x + 2);
+    lua_pushinteger(state, y + runtime->camera_y + 2);
+    lua_pushvalue(state, 5);
+    lua_pushinteger(state, 0xffffff);
+    lua_call(state, 4, 0);
+    lua_pushboolean(state, inside && (input.pressed & BUTTON_TOUCH));
+    return 1;
+}
+
+static int overlap(lua_State *state) {
+    int values[8];
+    for (unsigned i = 0; i < 8; i++)
+        values[i] = coordinate(state, i + 1);
+    lua_pushboolean(state, values[2] > 0 && values[3] > 0 && values[6] > 0 &&
+                               values[7] > 0 &&
+                               values[0] < values[4] + values[6] &&
+                               values[4] < values[0] + values[2] &&
+                               values[1] < values[5] + values[7] &&
+                               values[5] < values[1] + values[3]);
+    return 1;
+}
+
+static int module(lua_State *state) {
+    const char *path = luaL_checkstring(state, 1);
+    lua_settop(state, 1);
+    lua_getfield(state, LUA_REGISTRYINDEX, "lutin.modules");
+    lua_getfield(state, -1, path);
+    if (!lua_isnil(state, -1))
+        return 1;
+    lua_pop(state, 1);
+    lua_getfield(state, LUA_REGISTRYINDEX, "lutin.loading");
+    lua_getfield(state, -1, path);
+    if (lua_toboolean(state, -1))
+        return luaL_error(state, "Module cycle: %s", path);
+    lua_pop(state, 1);
+    lua_pushboolean(state, true);
+    lua_setfield(state, -2, path);
+    lua_pushcfunction(state, load_asset);
+    lua_pushvalue(state, 1);
+    lua_call(state, 1, 1);
+    if (lua_isnil(state, -1))
+        return luaL_error(state, "Module must return a value");
+    lua_pushvalue(state, -1);
+    lua_setfield(state, 2, path);
+    lua_pushnil(state);
+    lua_setfield(state, 3, path);
+    return 1;
+}
+
+static int tilemap(lua_State *state) {
+    luaL_checktype(state, 1, LUA_TTABLE);
+    luaL_checktype(state, 2, LUA_TTABLE);
+    int size = (int)luaL_checkinteger(state, 3);
+    luaL_argcheck(state, size >= 1 && size <= RUNTIME_SPRITE_MAX_SIZE, 3,
+                  "Tile size must be 1..64");
+    unsigned height = lua_rawlen(state, 1), tiles = lua_rawlen(state, 2);
+    luaL_argcheck(state, height && height <= TILEMAP_MAX_SIZE, 1,
+                  "Map height must be 1..64");
+    luaL_argcheck(state, tiles && tiles <= RUNTIME_PALETTE_COLORS, 2,
+                  "Map requires 1..16 sprites");
+    lua_rawgeti(state, 1, 1);
+    size_t width;
+    luaL_checklstring(state, -1, &width);
+    luaL_argcheck(state, width && width <= TILEMAP_MAX_SIZE, 1,
+                  "Map width must be 1..64");
+    lua_pop(state, 1);
+    for (unsigned i = 1; i <= tiles; i++) {
+        lua_rawgeti(state, 2, i);
+        Sprite *image = luaL_checkudata(state, -1, "lutin.sprite");
+        if (image->width != (unsigned)size || image->height != (unsigned)size)
+            return luaL_error(state, "Tile sprites must match tile size");
+        lua_pop(state, 1);
+    }
+    Tilemap *map = lua_newuserdatauv(state, sizeof(*map) + width * height, 1);
+    luaL_setmetatable(state, "lutin.tilemap");
+    map->width = width;
+    map->height = height;
+    map->tile_size = size;
+    lua_pushvalue(state, 2);
+    lua_setiuservalue(state, -2, 1);
+    for (unsigned y = 0; y < height; y++) {
+        lua_rawgeti(state, 1, y + 1);
+        size_t length;
+        const char *row = luaL_checklstring(state, -1, &length);
+        if (length != width)
+            return luaL_error(state, "Map rows must have equal widths");
+        for (unsigned x = 0; x < width; x++) {
+            static const char symbols[] = "0123456789abcdef";
+            const char *digit = row[x] ? strchr(symbols, row[x]) : NULL;
+            if (row[x] != '.' &&
+                (!digit || (unsigned)(digit - symbols) >= tiles))
+                return luaL_error(state, "Invalid tile index");
+            map->cells[y * width + x] =
+                row[x] == '.' ? TILEMAP_EMPTY : (unsigned)(digit - symbols);
+        }
+        lua_pop(state, 1);
+    }
+    return 1;
+}
+
+static int draw_tilemap(lua_State *state) {
+    Tilemap *map = luaL_checkudata(state, 1, "lutin.tilemap");
+    charge_pixels(state, map->width * map->height);
+    int x = coordinate(state, 2), y = coordinate(state, 3);
+    lua_settop(state, 3);
+    lua_getiuservalue(state, 1, 1);
+    for (unsigned row = 0; row < map->height; row++)
+        for (unsigned col = 0; col < map->width; col++) {
+            unsigned cell = map->cells[row * map->width + col];
+            int px = x + (int)(col * map->tile_size),
+                py = y + (int)(row * map->tile_size);
+            int sx = px - context(state)->camera_x,
+                sy = py - context(state)->camera_y;
+            if (cell == TILEMAP_EMPTY || sx >= RUNTIME_SCREEN_WIDTH ||
+                sy >= RUNTIME_SCREEN_HEIGHT || sx + (int)map->tile_size <= 0 ||
+                sy + (int)map->tile_size <= 0)
+                continue;
+            lua_pushcfunction(state, draw_sprite);
+            lua_rawgeti(state, 4, cell + 1);
+            lua_pushinteger(state, px);
+            lua_pushinteger(state, py);
+            lua_call(state, 3, 0);
+        }
+    return 0;
+}
+
+static int animation(lua_State *state) {
+    luaL_checktype(state, 1, LUA_TTABLE);
+    lua_Integer rate = luaL_checkinteger(state, 2);
+    size_t count = lua_rawlen(state, 1);
+    luaL_argcheck(state, count && count <= RUNTIME_SOUND_MAX_NOTES, 1,
+                  "Animation requires 1..128 sprites");
+    luaL_argcheck(state, rate >= 1 && rate <= RUNTIME_FRAMES_PER_SECOND, 2,
+                  "Frame duration must be 1..60 ticks");
+    for (size_t i = 1; i <= count; i++) {
+        lua_rawgeti(state, 1, i);
+        luaL_checkudata(state, -1, "lutin.sprite");
+        lua_pop(state, 1);
+    }
+    lua_newtable(state);
+    lua_pushvalue(state, 1);
+    lua_setfield(state, -2, "frames");
+    lua_pushinteger(state, rate);
+    lua_setfield(state, -2, "duration");
+    return 1;
+}
+
+static int draw_animation(lua_State *state) {
+    luaL_checktype(state, 1, LUA_TTABLE);
+    int x = coordinate(state, 2), y = coordinate(state, 3);
+    lua_getfield(state, 1, "duration");
+    lua_Integer rate = luaL_checkinteger(state, -1);
+    lua_getfield(state, 1, "frames");
+    luaL_checktype(state, -1, LUA_TTABLE);
+    size_t count = lua_rawlen(state, -1);
+    if (rate < 1 || count < 1 || count > RUNTIME_SOUND_MAX_NOTES)
+        return luaL_error(state, "Invalid animation");
+    lua_pushcfunction(state, draw_sprite);
+    lua_rawgeti(state, -2, (frame_count / (unsigned)rate) % count + 1);
+    lua_pushinteger(state, x);
+    lua_pushinteger(state, y);
+    lua_call(state, 3, 0);
+    return 0;
+}
+
+static bool charge_storage(Runtime *runtime, size_t bytes) {
+    if (++runtime->storage_operations > RUNTIME_STORAGE_OPERATIONS ||
+        bytes > RUNTIME_STORAGE_BYTES - runtime->storage_bytes)
+        return false;
+    runtime->storage_bytes += (unsigned)bytes;
+    return true;
+}
+
+static int save_data(lua_State *state) {
+    Runtime *runtime = context(state);
+    if (runtime != &active || testing || !save_writer)
+        return luaL_error(state,
+                          "Save data requires live execution and storage");
+    ValueBudget value_budget = {0};
+    cJSON *value = lua_value_json(state, 1, 0, &value_budget);
+    if (!value)
+        return luaL_error(state,
+                          "Save data must be bounded JSON-compatible data");
+    char *encoded = cJSON_PrintUnformatted(value);
+    cJSON_Delete(value);
+    bool budget_ok = charge_storage(runtime, encoded ? strlen(encoded) : 0);
+    bool ok = budget_ok && encoded && strlen(encoded) <= RUNTIME_SAVE_BYTES &&
+              save_writer("save-data.json", encoded);
+    free(encoded);
+    if (!budget_ok)
+        return luaL_error(state, "Storage budget exceeded");
+    if (!ok)
+        return luaL_error(state, "Save data failed or exceeds 8192 bytes");
+    return 0;
+}
+
+static int load_save(lua_State *state) {
+    if (!charge_storage(context(state), RUNTIME_SAVE_BYTES))
+        return luaL_error(state, "Storage budget exceeded");
+    char *encoded = asset_reader
+                        ? asset_reader("save-data.json", RUNTIME_SAVE_BYTES)
+                        : NULL;
+    if (!encoded) {
+        lua_pushnil(state);
+        return 1;
+    }
+    Runtime *runtime = context(state);
+    runtime->temporary_json = cJSON_Parse(encoded);
+    free(encoded);
+    if (!runtime->temporary_json)
+        return luaL_error(state, "Invalid save data");
+    lua_value_push(state, runtime->temporary_json, 0, VALUE_MAX_DEPTH);
+    cJSON_Delete(runtime->temporary_json);
+    runtime->temporary_json = NULL;
+    return 1;
 }
 
 static unsigned note_value(lua_State *state, int index, unsigned minimum,
@@ -465,10 +792,14 @@ static bool call(Runtime *runtime, const char *name, bool delta) {
     runtime->instructions = 0;
     runtime->pixels = 0;
     runtime->asset_bytes = 0;
+    runtime->storage_operations = runtime->storage_bytes = 0;
     lua_pushcfunction(state, invoke);
     lua_pushlightuserdata(state, (void *)name);
     lua_pushboolean(state, delta);
-    if (lua_pcall(state, 2, 0, 0) == LUA_OK)
+    int status = lua_pcall(state, 2, 0, 0);
+    cJSON_Delete(runtime->temporary_json);
+    runtime->temporary_json = NULL;
+    if (status == LUA_OK)
         return true;
     const char *message =
         lua_type(state, -1) == LUA_TSTRING ? lua_tostring(state, -1) : NULL;
@@ -487,6 +818,20 @@ static int initialize(lua_State *state) {
                                   {"buttons", buttons},
                                   {"touch", touch},
                                   {"load_asset", load_asset},
+                                  {"module", module},
+                                  {"camera", camera},
+                                  {"mesh", mesh_create},
+                                  {"draw_mesh", mesh_draw},
+                                  {"camera3d", camera3d},
+                                  {"measure_text", measure_text},
+                                  {"button", button},
+                                  {"overlap", overlap},
+                                  {"tilemap", tilemap},
+                                  {"draw_tilemap", draw_tilemap},
+                                  {"animation", animation},
+                                  {"draw_animation", draw_animation},
+                                  {"save", save_data},
+                                  {"load_save", load_save},
                                   {"sprite", sprite},
                                   {"draw_sprite", draw_sprite},
                                   {"sound", sound},
@@ -497,6 +842,18 @@ static int initialize(lua_State *state) {
     lua_pushliteral(state, "sprite");
     lua_setfield(state, -2, "__metatable");
     lua_pop(state, 1);
+    luaL_newmetatable(state, "lutin.tilemap");
+    lua_pushliteral(state, "tilemap");
+    lua_setfield(state, -2, "__metatable");
+    lua_pop(state, 1);
+    luaL_newmetatable(state, "lutin.mesh");
+    lua_pushliteral(state, "mesh");
+    lua_setfield(state, -2, "__metatable");
+    lua_pop(state, 1);
+    lua_newtable(state);
+    lua_setfield(state, LUA_REGISTRYINDEX, "lutin.modules");
+    lua_newtable(state);
+    lua_setfield(state, LUA_REGISTRYINDEX, "lutin.loading");
     luaL_newmetatable(state, "lutin.sound");
     lua_pushliteral(state, "sound");
     lua_setfield(state, -2, "__metatable");
@@ -504,6 +861,9 @@ static int initialize(lua_State *state) {
     luaL_requiref(state, "_G", luaopen_base, 1);
     lua_pop(state, 1);
     luaL_requiref(state, "math", luaopen_math, 1);
+    lua_getfield(state, -1, "randomseed");
+    lua_pushinteger(state, (lua_Integer)context(state)->seed);
+    lua_call(state, 1, 0);
     lua_pop(state, 1);
     luaL_requiref(state, "string", luaopen_string, 1);
     sandbox_limit_string(state);
@@ -548,15 +908,15 @@ static int initialize(lua_State *state) {
     return 0;
 }
 
-bool runtime_start(const char *code) {
-    Runtime candidate = {0};
+static bool start(const char *code, unsigned seed, bool test) {
+    Runtime candidate = {.seed = seed};
     candidate.state = lua_newstate(allocate, &candidate);
     if (!candidate.state) {
         snprintf(error, sizeof(error), "Lua memory unavailable");
         return false;
     }
     lua_State *state = candidate.state;
-    lua_sethook(state, budget, LUA_MASKCOUNT, 1000);
+    lua_sethook(state, budget, LUA_MASKCOUNT, RUNTIME_HOOK_INTERVAL);
     lua_pushcfunction(state, initialize);
     int status = lua_pcall(state, 0, 0, 0);
     if (status == LUA_OK)
@@ -564,6 +924,7 @@ bool runtime_start(const char *code) {
     if (status == LUA_OK)
         status = lua_pcall(state, 0, 0, 0);
     if (status != LUA_OK) {
+        cJSON_Delete(candidate.temporary_json);
         const char *message =
             lua_type(state, -1) == LUA_TSTRING ? lua_tostring(state, -1) : NULL;
         snprintf(error, sizeof(error), "%s",
@@ -578,13 +939,45 @@ bool runtime_start(const char *code) {
     }
     runtime_stop();
     active = candidate;
+    testing = test;
+    test_buttons = 0;
+    frame_count = last_frame_us = peak_frame_us = budget_failures = 0;
+    peak_memory = active.peak_memory;
     lua_setallocf(state, allocate, &active);
     error[0] = 0;
     log_message("Program started");
     return true;
 }
 
+bool runtime_start(const char *code) { return start(code, 1, false); }
+bool runtime_start_test(const char *code, unsigned seed) {
+    uint16_t *candidate_pixels =
+        calloc(RUNTIME_SCREEN_WIDTH * RUNTIME_SCREEN_HEIGHT, sizeof(uint16_t));
+    if (!candidate_pixels) {
+        snprintf(error, sizeof(error), "Test framebuffer memory unavailable");
+        return false;
+    }
+    RuntimeInput previous_input = input;
+    unsigned previous_frames = frame_count;
+    input = (RuntimeInput){.pixels = candidate_pixels};
+    frame_count = 0;
+    mesh_clear_depth = true;
+    if (!start(code, seed, true)) {
+        input = previous_input;
+        frame_count = previous_frames;
+        free(candidate_pixels);
+        return false;
+    }
+    memcpy(test_pixels, candidate_pixels, sizeof(test_pixels));
+    free(candidate_pixels);
+    input.pixels = test_pixels;
+    return true;
+}
+
 void runtime_stop(void) {
+    if (active.peak_memory > peak_memory)
+        peak_memory = active.peak_memory;
+    cJSON_Delete(active.temporary_json);
     if (active.state) {
         if (audio_output)
             for (unsigned i = 0; i < RUNTIME_AUDIO_VOICES; i++)
@@ -593,17 +986,112 @@ void runtime_stop(void) {
         log_message("Program stopped");
     }
     memset(&active, 0, sizeof(active));
+    testing = false;
+}
+
+static void frame(RuntimeInput value) {
+    input = value;
+    if (!active.state)
+        return;
+    mesh_clear_depth = true;
+    uint64_t before = microseconds();
+    if (active.state &&
+        (!call(&active, "update", true) || !call(&active, "draw", false))) {
+        if (strstr(error, "budget") || strstr(error, "memory"))
+            budget_failures++;
+        runtime_stop();
+    }
+    if (active.state)
+        audio_frame();
+    frame_count++;
+    last_frame_us = (unsigned)(microseconds() - before);
+    if (last_frame_us > peak_frame_us)
+        peak_frame_us = last_frame_us;
+    if (active.peak_memory > peak_memory)
+        peak_memory = active.peak_memory;
 }
 
 void runtime_frame(RuntimeInput value) {
-    input = value;
-    if (active.state &&
-        (!call(&active, "update", true) || !call(&active, "draw", false)))
-        runtime_stop();
-    if (active.state)
-        audio_frame();
+    if (testing) {
+        if (value.pixels)
+            memcpy(value.pixels, test_pixels, sizeof(test_pixels));
+        return;
+    }
+    frame(value);
+}
+
+bool runtime_step(unsigned frames, unsigned buttons, int x, int y) {
+    if (!testing || !active.state || frames < 1 ||
+        frames > RUNTIME_TEST_MAX_FRAMES || (buttons & ~BUTTON_ALL) || x < 0 ||
+        x >= RUNTIME_SCREEN_WIDTH || y < 0 || y >= RUNTIME_SCREEN_HEIGHT)
+        return false;
+    for (unsigned i = 0; i < frames; i++) {
+        frame((RuntimeInput){test_pixels, buttons, buttons & ~test_buttons, x,
+                             y, (buttons & BUTTON_TOUCH) != 0});
+        test_buttons = buttons;
+        if (!active.state)
+            return false;
+#ifdef ARM9
+        cothread_yield_irq(IRQ_VBLANK);
+#endif
+    }
+    return true;
+}
+
+void runtime_finish_test(void) {
+    testing = false;
+    test_buttons = 0;
+}
+
+static int inspect_value(lua_State *state) {
+    lua_getglobal(state, "inspect");
+    if (lua_isnil(state, -1))
+        return 1;
+    lua_call(state, 0, 1);
+    return 1;
+}
+
+cJSON *runtime_inspect(void) {
+    if (active.peak_memory > peak_memory)
+        peak_memory = active.peak_memory;
+    cJSON *result = cJSON_CreateObject();
+    cJSON_AddBoolToObject(result, "running", runtime_running());
+    cJSON_AddBoolToObject(result, "testing", testing);
+    cJSON_AddNumberToObject(result, "frames", frame_count);
+    cJSON_AddNumberToObject(result, "memory", active.memory);
+    cJSON_AddNumberToObject(result, "peak_memory", peak_memory);
+    cJSON_AddNumberToObject(result, "last_frame_us", last_frame_us);
+    cJSON_AddNumberToObject(result, "peak_frame_us", peak_frame_us);
+    cJSON_AddNumberToObject(result, "budget_failures", budget_failures);
+    cJSON_AddStringToObject(result, "error", error);
+    if (active.state) {
+        lua_State *state = active.state;
+        active.instructions = active.pixels = 0;
+        active.storage_operations = active.storage_bytes = 0;
+        lua_pushcfunction(state, inspect_value);
+        if (lua_pcall(state, 0, 1, 0) == LUA_OK) {
+            ValueBudget value_budget = {0};
+            cJSON *value = lua_value_json(state, -1, 0, &value_budget);
+            if (value)
+                cJSON_AddItemToObject(result, "state", value);
+            else
+                cJSON_AddStringToObject(
+                    result, "inspection_error",
+                    "State must be bounded JSON-compatible data");
+        } else {
+            cJSON_AddStringToObject(result, "inspection_error",
+                                    lua_type(state, -1) == LUA_TSTRING
+                                        ? lua_tostring(state, -1)
+                                        : "Inspection failed");
+        }
+        lua_pop(state, 1);
+        cJSON_Delete(active.temporary_json);
+        active.temporary_json = NULL;
+    }
+    return result;
 }
 
 bool runtime_running(void) { return active.state != NULL; }
+bool runtime_testing(void) { return testing; }
 const char *runtime_error(void) { return error; }
 size_t runtime_memory(void) { return active.memory; }

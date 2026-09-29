@@ -10,6 +10,10 @@ fi
 mkdir -p "$output"
 rom=$(nix build .#rom --no-link --print-out-paths)
 kit=$(nix build .#release-kit --no-link --print-out-paths)
+for scene in 2d 3d; do
+	evidence=$(nix build ".#checks.x86_64-linux.creation-$scene-e2e" --no-link --print-out-paths)
+	install -m 644 "$evidence/session.mp4" "$output/lutin-$version-$scene-replay.mp4"
+done
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 cp -a "$kit/." "$work/"
@@ -22,6 +26,6 @@ rm -f "$output/lutin-$version-sd.zip"
 )
 (
 	cd "$output"
-	sha256sum "lutin-$version.nds" "lutin-$version-sd.zip" >SHA256SUMS
+	sha256sum "lutin-$version"* >SHA256SUMS
 	sha256sum --check SHA256SUMS
 )

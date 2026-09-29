@@ -7,6 +7,7 @@
 #include "platform_audio.h"
 #include "platform_input.h"
 #include "runtime.h"
+#include "text.h"
 #include "workspace.h"
 #include <fat.h>
 #include <nds.h>
@@ -83,6 +84,7 @@ static unsigned chat_scroll, source_scroll, queue_index;
 static int editing_queue = -1;
 static char prompt[1024], code[32769], message[160];
 static uint16_t frame_pixels[256 * 192];
+static unsigned char extended_font[TEXT_GLYPHS * TEXT_GLYPH_BYTES];
 static PrintConsole top_console, bottom_console;
 static uint16_t top_map[32 * 32], bottom_map[32 * 32];
 static int program_background;
@@ -160,13 +162,13 @@ static void open_project(unsigned selected) {
 static void page_text(const char *text, unsigned rows) {
     unsigned column = 0;
     while (*text && rows) {
-        unsigned char value = (unsigned char)*text++;
+        unsigned char value = text_next(&text);
         if (value == '\n') {
             consolePrintChar('\n');
             column = 0;
             rows--;
         } else {
-            consolePrintChar(value >= 32 && value < 127 ? value : ' ');
+            consolePrintChar(value);
             if (++column == 32) {
                 column = 0;
                 rows--;
@@ -265,7 +267,9 @@ static void render_top(bool storage) {
     consoleSetColor(&top_console, CONSOLE_LIGHT_GRAY);
     printf("%s SD:%s P%u S%u  %s\n", isDSiMode() ? "DSi" : "DS",
            storage ? "OK" : "--", project, session_number,
-           runtime_running() ? "RUN" : "STOP");
+           runtime_testing()   ? "TEST"
+           : runtime_running() ? "RUN"
+                               : "STOP");
     consoleSetColor(&top_console, CONSOLE_YELLOW);
     page_text(agent_status(), 2);
     ChatPage page;
@@ -410,6 +414,7 @@ static void render_bottom(void) {
 
 int main(void) {
     defaultExceptionHandler();
+    systemCounterSetup();
     setvbuf(stdout, NULL, _IONBF, 0);
     videoSetMode(MODE_5_2D);
     videoSetModeSub(MODE_0_2D);
@@ -423,11 +428,20 @@ int main(void) {
         frame_pixels[i] = RGB15(2, 4, 6) | BIT(15);
     consoleInit(&top_console, 0, BgType_Text4bpp, BgSize_T_256x256, 31, 0,
                 false, true);
-    runtime_set_font(top_console.font.gfx);
+    text_extend_font(extended_font, top_console.font.gfx);
+    ConsoleFont creation_font = top_console.font;
+    creation_font.gfx = extended_font;
+    creation_font.numChars = TEXT_GLYPHS;
+    consoleSetFont(&top_console, &creation_font);
+    runtime_set_font(extended_font);
     consoleInit(&bottom_console, 0, BgType_Text4bpp, BgSize_T_256x256, 31, 0,
                 true, true);
-    Keyboard *keyboard = keyboardInit(NULL, 1, BgType_Text4bpp,
-                                      BgSize_T_256x512, 20, 1, true, true);
+    consoleSetFont(&bottom_console, &creation_font);
+    /* Keyboard tiles occupy 0x4000..0xab80; keep both map blocks above them. */
+    enum { KEYBOARD_MAP_BLOCK = 24, KEYBOARD_TILE_BLOCK = 1 };
+    Keyboard *keyboard =
+        keyboardInit(NULL, 1, BgType_Text4bpp, BgSize_T_256x512,
+                     KEYBOARD_MAP_BLOCK, KEYBOARD_TILE_BLOCK, true, true);
     keyboard->scrollSpeed = 0;
     uint16_t *top_vram = top_console.fontBgMap;
     uint16_t *bottom_vram = bottom_console.fontBgMap;
@@ -438,6 +452,7 @@ int main(void) {
     workspace_init(storage, "/lutin");
     catalog_load("/lutin");
     runtime_set_asset_reader(workspace_read);
+    runtime_set_save_writer(workspace_write);
     soundEnable();
     runtime_set_audio(platform_audio);
     config_load("/lutin/config.json");

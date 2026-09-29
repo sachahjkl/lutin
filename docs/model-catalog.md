@@ -59,6 +59,9 @@ For example, `Authorization: Bearer` produces `Authorization: Bearer <key>`.
 An optional `session_header` names the header that carries the session identifier.
 Supported protocols are `responses` and `chat-completions`.
 The optional per-model `reasoning_effort` sets the provider's reasoning level. Omit it when unsupported.
+Set the per-model boolean `image_input` to `true` when the selected route supports image input.
+If this field is absent or false, the capture tool reports that image input is unsupported.
+The catalog generator reads this capability from models.dev input modalities.
 The transport appends `/responses` or `/chat/completions` to the provider base URL.
 Adding a provider that needs another protocol still requires implementing that protocol.
 

@@ -16,4 +16,6 @@ bool workspace_remove(const char *path);
 bool workspace_missing(const char *path);
 bool workspace_path(const char *path, char *output, size_t capacity);
 const char *workspace_error(void);
+bool workspace_source_file(const char *name);
+bool workspace_checkpoint(const char *name, bool restore);
 #endif

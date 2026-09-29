@@ -29,6 +29,13 @@ DSi interface → agent → protocol adapter → HTTPS → OpenCode Go
 6. OpenCode Go models with separate Responses and Chat Completions adapters.
 7. Dynamic sessions, configuration file, versioned write chunks, and paged reads.
 8. VBlank input capture and menu isolation, with host and emulator regressions.
+9. Seeded test execution, injected input, state inspection, and frame/memory metrics.
+10. Immutable PNG captures, model image-input metadata, and image requests for both transports.
+11. Tilemaps, camera offsets, animation, modules, touch buttons, and project save data.
+12. Source checkpoints with a persistent restore journal and interrupted-restore recovery.
+13. Bounded CPU triangle rendering with near-plane clipping and a fixed depth buffer.
+
+See `docs/creation-tools.md` for API contracts and limits.
 
 ## Technical decisions
 

@@ -19,6 +19,7 @@ def build(source, routes):
                 "id": f"{route['provider']}/{route['model']}",
                 "name": f"{provider['name']} / {model['name']}",
                 **route,
+                "image_input": "image" in model["modalities"].get("input", []),
             }
         )
     return catalog

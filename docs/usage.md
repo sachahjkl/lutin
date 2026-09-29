@@ -160,7 +160,7 @@ A program defines optional `init()`, `update(dt)`, and `draw()` functions.
 | `ds.clear(color)`                           | Fill the lower-screen framebuffer.                             |
 | `ds.rect(x, y, width, height, color)`       | Draw a filled rectangle.                                       |
 | `ds.line(x1, y1, x2, y2, color)`            | Draw a line.                                                   |
-| `ds.text(x, y, text, color)`                | Draw ASCII text.                                               |
+| `ds.text(x, y, text, color)`                | Draw UTF-8 text with supported Latin glyphs.                   |
 | `ds.buttons()`                              | Return `held, pressed` masks.                                  |
 | `ds.touch()`                                | Return `x, y, down`.                                           |
 | `ds.load_asset(path)`                       | Execute a project Lua asset and return its value.              |
@@ -196,7 +196,7 @@ end
 
 ## Agent tools
 
-Explicit JSON tools are `read_file`, `write_file`, `patch_file`, `run_program`, `inspect_runtime`, `read_logs`, and `list_files`.
+Explicit JSON tools cover project files, runtime execution, deterministic tests, captures, and checkpoints.
 Their schemas describe required arguments.
 
 `read_file(path, offset, limit)` reads up to 4,096 bytes and returns `text`, `version`, `next_offset`, and `total_bytes`.
@@ -211,21 +211,27 @@ Writes and patches return the new version. The next operation must use that exac
 `execute` runs a short Code Mode Lua script in a fresh state with `tools`, `math`, `string`, and `table`.
 Lua calls use positional arguments and multiple return values:
 
-| Lua tool                                           | Result                                         |
-| -------------------------------------------------- | ---------------------------------------------- |
-| `list_files(offset, limit)`                        | Filenames and next offset, at most 32 entries. |
-| `read_file(path)`                                  | Text and version, or `nil, "missing"`.         |
-| `write_file(path, text, expected_version, append)` | Status and new version. `append` is optional.  |
-| `patch_file(path, old, new, expected_version)`     | Status and new version.                        |
-| `run_program(path)`                                | Load and start a Lua file.                     |
-| `stop_program()`                                   | Stop the creation.                             |
-| `inspect_runtime()`                                | Running state, memory, and last error.         |
-| `read_logs(cursor)`                                | Diagnostics and next cursor.                   |
-| `capture_screen()`                                 | Save `capture.ppm` and return its reference.   |
+| Lua tool                                           | Result                                                    |
+| -------------------------------------------------- | --------------------------------------------------------- |
+| `list_files(offset, limit)`                        | Filenames and next offset, at most 32 entries.            |
+| `read_file(path)`                                  | Text and version, or `nil, "missing"`.                    |
+| `write_file(path, text, expected_version, append)` | Status and new version. `append` is optional.             |
+| `patch_file(path, old, new, expected_version)`     | Status and new version.                                   |
+| `run_program(path)`                                | Load and start a Lua file.                                |
+| `stop_program()`                                   | Stop the creation.                                        |
+| `inspect_runtime()`                                | State table, memory, frame timing, and errors.            |
+| `read_logs(cursor)`                                | Diagnostics and next cursor.                              |
+| `capture_screen()`                                 | Save an immutable PNG and attach image input.             |
+| `start_test(path, seed)`                           | Start a repeatable test with automatic frames paused.     |
+| `step_frames(frames, buttons, touch_x, touch_y)`   | Advance frames with injected input and return inspection. |
+| `finish_test()`                                    | Resume automatic frames and live input.                   |
+| `create_checkpoint(name)`                          | Save project source and assets.                           |
+| `restore_checkpoint(name)`                         | Restore source and assets, then stop the creation.        |
 
 Paths are flat filenames relative to the active project.
 Tools cannot write session journals or access the credential directory.
-Captures are not sent to the model as images.
+Image-capable models receive the latest capture as image input. Text-only models reject the capture tool.
+See [Creation tools](creation-tools.md) for test examples, reusable APIs, software 3D, and checkpoint limits.
 
 ## Limits and recovery
 

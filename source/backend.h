@@ -13,6 +13,7 @@ typedef struct {
     const Provider *provider;
     ApiProtocol protocol;
     const char *reasoning_effort;
+    bool image_input;
 } Backend;
 
 enum {

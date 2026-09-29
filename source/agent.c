@@ -1,6 +1,7 @@
 #include "agent.h"
 #include "backend.h"
 #include "config.h"
+#include "image.h"
 #include "network.h"
 #include "tools.h"
 #include "workspace.h"
@@ -71,12 +72,34 @@ static const char instructions[] =
     "Patch example: local old,v=tools.read_file('main.lua'); "
     "assert(old,'Read the project before patching'); "
     "return tools.patch_file('main.lua','0x102030','0x203040',v). "
-    "tools.capture_screen() saves capture.ppm and returns its filename, not "
-    "model vision; "
+    "tools.capture_screen() saves an immutable PNG and attaches the latest "
+    "capture "
+    "as image input when the selected model supports images. Text-only models "
+    "reject this tool. "
     "tools.run_program(path) starts Lua; "
-    "tools.stop_program() stops it; tools.inspect_runtime() and "
-    "tools.read_logs() return diagnostics. "
-    "Return a string from each Code Mode script. Project paths are flat "
+    "tools.stop_program() stops it. tools.inspect_runtime() returns a table "
+    "with running, "
+    "testing, frames, memory, peak_memory, last_frame_us, peak_frame_us, "
+    "budget_failures, error, "
+    "and state from the program's optional inspect() function. Keep inspect() "
+    "small and return JSON-compatible data. "
+    "Use tools.start_test(path,seed) to start deterministically with automatic "
+    "frames paused. "
+    "tools.step_frames(frames,buttons,touch_x=0,touch_y=0) advances at most "
+    "120 frames TOTAL per execute call "
+    "and returns inspect_runtime(). Held masks use tools.RIGHT, tools.A, "
+    "tools.TOUCH and other named buttons. "
+    "Pressed edges are derived from held changes. Use TOUCH for gestures. "
+    "Assert returned state to test movement and jumping. tools.finish_test() "
+    "resumes live input; call it before finishing. "
+    "tools.create_checkpoint(name) saves project source/assets before edits. "
+    "tools.restore_checkpoint(name) "
+    "stops the program, restores those files and removes new source files. "
+    "Read versions again afterward. "
+    "Sessions, captures and save data are excluded. tools.read_logs() returns "
+    "diagnostics. "
+    "Return a short string or JSON-compatible table from each Code Mode "
+    "script. Project paths are flat "
     "filenames, at most 80 ASCII characters. "
     "Each file is limited to 32768 bytes. Code Mode has a 512KB memory budget "
     "and 100000 instructions. "
@@ -84,7 +107,8 @@ static const char instructions[] =
     "update(dt), draw(). "
     "ds.clear(0xRRGGBB), ds.rect(x,y,width,height,0xRRGGBB) draw on a 256x192 "
     "screen. "
-    "ds.text(x,y,text,color) draws ASCII text. ds.line(x1,y1,x2,y2,color) "
+    "ds.text(x,y,text,color) draws UTF-8 text (ASCII, Latin-1 accents and "
+    "French ligatures). ds.line(x1,y1,x2,y2,color) "
     "draws a line. "
     "Generate pixel art and audio as editable Lua asset files through the file "
     "tools. "
@@ -99,8 +123,31 @@ static const char instructions[] =
     "Example asset: return ds.sprite({'01','1.'},{0xffffff,0x00ffff}). "
     "ds.draw_sprite(sprite,x,y,scale=1,flip=false) draws it; scale is integer "
     "1..8. "
-    "For animation, return a Lua array of sprites and select a frame in "
-    "update/draw. "
+    "ds.animation(spriteArray,ticksPerImage) and "
+    "ds.draw_animation(animation,x,y) loop frames. "
+    "ds.tilemap(rows,sprites,tileSize) compiles 1..64 rows/columns of '.', or "
+    "'0123456789abcdef' sprite indices. "
+    "Each tile sprite must have tileSize width and height. "
+    "ds.draw_tilemap(map,x,y) clips to the screen. "
+    "ds.camera(x,y) offsets 2D world drawing; reset it to 0,0 for HUD text. "
+    "ds.overlap(x,y,w,h,x2,y2,w2,h2) tests rectangle collision. "
+    "ds.measure_text(text) returns width,height; ds.button(x,y,w,h,label) "
+    "draws a screen-space touch button and returns true on touch press. "
+    "ds.module('file.lua') loads and caches a project module at startup/init; "
+    "modules must return a value and cannot form cycles. "
+    "ds.save(value) writes up to 8192 bytes of JSON-compatible project save "
+    "data during live execution, not test mode; "
+    "ds.load_save() returns it or nil. Save-data access is limited to four "
+    "operations and 16 KiB per callback; each read counts as 8 KiB. "
+    "For software-rendered 3D, ds.mesh(vertices,faces) accepts up to 256 "
+    "vertices {x,y,z} and 256 faces {i,j,k,color}. "
+    "Indices are one-based. ds.draw_mesh(mesh,x,y,z,yawRadians) renders "
+    "depth-tested flat-color triangles; positive Z is forward, positive Y is "
+    "up. "
+    "ds.camera3d(x,y,z,yawRadians,pitchRadians) controls the view. Near plane "
+    "is 0.25, focal length 160 pixels. "
+    "Use small low-poly scenes; this uses the CPU framebuffer, not the DS 3D "
+    "engine. "
     "ds.sound('square' or 'noise',notes) compiles 1..128 notes, each "
     "{frequencyHz,durationFrames,volume}. "
     "Frequency is 0 for rest or 32..16000; duration is 1..3600 frames at 60Hz; "
@@ -513,6 +560,46 @@ static bool request(void) {
     cJSON_AddItemToObject(body, "include",
                           cJSON_Parse("[\"reasoning.encrypted_content\"]"));
     cJSON_AddItemToObject(body, "input", cJSON_Duplicate(history, 1));
+    if (backends[model].image_input) {
+        const char *capture = NULL;
+        cJSON *entry;
+        cJSON_ArrayForEach(entry, history) {
+            if (strcmp(string(entry, "type"), "function_call_output"))
+                continue;
+            cJSON *record = cJSON_GetObjectItemCaseSensitive(
+                journal, string(entry, "call_id"));
+            if (*string(record, "image"))
+                capture = string(record, "image");
+        }
+        if (capture) {
+            char *url = image_data_url(capture);
+            if (!url) {
+                cJSON_Delete(body);
+                snprintf(status, sizeof(status),
+                         "Captured image unavailable: %.64s", capture);
+                return false;
+            }
+            cJSON *message = cJSON_CreateObject();
+            cJSON_AddStringToObject(message, "role", "user");
+            cJSON *content = cJSON_AddArrayToObject(message, "content");
+            cJSON *caption = cJSON_CreateObject();
+            cJSON_AddStringToObject(caption, "type", "input_text");
+            char label[128];
+            snprintf(label, sizeof(label),
+                     "Most recent tool capture: %s. This is the state at "
+                     "capture time.",
+                     capture);
+            cJSON_AddStringToObject(caption, "text", label);
+            cJSON_AddItemToArray(content, caption);
+            cJSON *image = cJSON_CreateObject();
+            cJSON_AddStringToObject(image, "type", "input_image");
+            cJSON_AddStringToObject(image, "image_url", url);
+            cJSON_AddItemToArray(content, image);
+            cJSON_AddItemToArray(
+                cJSON_GetObjectItemCaseSensitive(body, "input"), message);
+            free(url);
+        }
+    }
     cJSON *tools = tools_schema();
     cJSON_AddItemToObject(body, "tools", tools);
     cJSON_AddBoolToObject(body, "parallel_tool_calls", false);
@@ -644,8 +731,13 @@ void agent_tick(void) {
                     return;
                 }
                 previous = NULL;
+                tools_set_image_support(agent_model() < BACKEND_COUNT &&
+                                        backends[agent_model()].image_input);
                 bool ok = tools_call(string(item, "name"), arguments, result,
                                      sizeof(result));
+                if (*tools_capture_result())
+                    cJSON_AddStringToObject(record, "image",
+                                            tools_capture_result());
                 cJSON_AddBoolToObject(record, "ok", ok);
                 cJSON_ReplaceItemInObjectCaseSensitive(
                     record, "result", cJSON_CreateString(result));

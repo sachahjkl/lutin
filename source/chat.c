@@ -1,5 +1,6 @@
 #include "chat.h"
 #include "agent.h"
+#include "text.h"
 #include <string.h>
 
 static void line(ChatPage *page, const char *text, size_t length,
@@ -28,12 +29,12 @@ static void message(const char *role, const char *text, void *context) {
     char buffer[CHAT_COLUMNS];
     size_t length = 0;
     while (*text) {
-        unsigned char value = (unsigned char)*text++;
+        unsigned char value = text_next(&text);
         if (value == '\n') {
             line(page, buffer, length, 7);
             length = 0;
         } else {
-            buffer[length++] = value >= 32 && value < 127 ? (char)value : ' ';
+            buffer[length++] = (char)value;
             if (length == CHAT_COLUMNS) {
                 line(page, buffer, length, 7);
                 length = 0;

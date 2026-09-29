@@ -71,6 +71,29 @@ int main(void) {
     free(multiple_request);
     free(encoded);
     protocol_start(API_CHAT_COMPLETIONS, event);
+    const char *visual =
+        "{\"model\":\"vision\",\"instructions\":\"Inspect\",\"input\":[{"
+        "\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":"
+        "\"Screenshot\"},{\"type\":\"input_image\",\"image_url\":\"data:image/"
+        "png;base64,AAAA\"}]}]}";
+    encoded = protocol_request(visual, API_CHAT_COMPLETIONS);
+    body = cJSON_Parse(encoded);
+    cJSON *visual_parts = cJSON_GetObjectItemCaseSensitive(
+        cJSON_GetArrayItem(cJSON_GetObjectItemCaseSensitive(body, "messages"),
+                           1),
+        "content");
+    assert(cJSON_GetArraySize(visual_parts) == 2);
+    assert(!strcmp(cJSON_GetObjectItemCaseSensitive(
+                       cJSON_GetObjectItemCaseSensitive(
+                           cJSON_GetArrayItem(visual_parts, 1), "image_url"),
+                       "url")
+                       ->valuestring,
+                   "data:image/png;base64,AAAA"));
+    cJSON_Delete(body);
+    free(encoded);
+    encoded = protocol_request(visual, API_RESPONSES);
+    assert(encoded && !strcmp(encoded, visual));
+    free(encoded);
     protocol_event("{\"choices\":[{\"delta\":{\"content\":\"hello\","
                    "\"reasoning_content\":\"plan\"}}]}");
     protocol_event("{\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,"

@@ -1,4 +1,6 @@
 #include "tools.h"
+#include "image.h"
+#include "lua_value.h"
 #include "runtime.h"
 #include "sandbox.h"
 #include "workspace.h"
@@ -16,7 +18,22 @@ typedef struct {
     unsigned instructions;
     char *temporary;
     unsigned operations;
+    unsigned test_frames;
+    cJSON *temporary_json;
 } Budget;
+enum {
+    TOOL_MEMORY_BYTES = 512 * 1024,
+    TOOL_INSTRUCTIONS = 100000,
+    TOOL_HOOK_INTERVAL = 1000,
+    TOOL_OPERATION_LIMIT = 32
+};
+static bool image_support;
+static char captured_image[64];
+void tools_set_image_support(bool supported) {
+    image_support = supported;
+    captured_image[0] = 0;
+}
+const char *tools_capture_result(void) { return captured_image; }
 
 static Budget *context(lua_State *state) {
     Budget *budget;
@@ -25,7 +42,7 @@ static Budget *context(lua_State *state) {
 }
 
 static void operation(lua_State *state) {
-    if (++context(state)->operations > 32)
+    if (++context(state)->operations > TOOL_OPERATION_LIMIT)
         luaL_error(state, "Code Mode tool limit exceeded (32 calls)");
 }
 
@@ -57,7 +74,7 @@ static void *allocate(void *context, void *pointer, size_t old, size_t size) {
         budget->used -= old;
         return NULL;
     }
-    if (size > 512 * 1024 - (budget->used - old))
+    if (size > TOOL_MEMORY_BYTES - (budget->used - old))
         return NULL;
     void *result = realloc(pointer, size);
     if (result)
@@ -69,7 +86,7 @@ static void hook(lua_State *state, lua_Debug *debug) {
     (void)debug;
     Budget *budget;
     lua_getallocf(state, (void **)&budget);
-    if (++budget->instructions >= 100)
+    if (++budget->instructions >= TOOL_INSTRUCTIONS / TOOL_HOOK_INTERVAL)
         luaL_error(state, "Code Mode instruction budget exceeded");
 }
 
@@ -119,8 +136,9 @@ static int write_file(lua_State *state) {
                           "write_file append argument must be a boolean");
     if (length > 32768 || strlen(data) != length)
         return luaL_error(state, "Text file must be at most 32768 bytes");
-    if (session_file(path))
-        return luaL_error(state, "Session files are managed by the host");
+    if (!workspace_source_file(path))
+        return luaL_error(state, "Session, capture, checkpoint and save files "
+                                 "are managed by the host");
     char *previous = workspace_read(path, 32768);
     if (!previous && !workspace_missing(path))
         return luaL_error(state, "%s", workspace_error());
@@ -223,19 +241,89 @@ static int stop_program(lua_State *state) {
 
 static int inspect_runtime(lua_State *state) {
     operation(state);
-    lua_pushfstring(state, "running=%s memory=%d error=%s",
-                    runtime_running() ? "true" : "false", (int)runtime_memory(),
-                    runtime_error());
+    context(state)->temporary_json = runtime_inspect();
+    if (!context(state)->temporary_json)
+        return luaL_error(state, "Inspection memory unavailable");
+    lua_value_push(state, context(state)->temporary_json, 0,
+                   VALUE_TOOL_MAX_DEPTH);
+    cJSON_Delete(context(state)->temporary_json);
+    context(state)->temporary_json = NULL;
+    return 1;
+}
+
+static int start_test(lua_State *state) {
+    operation(state);
+    const char *path = luaL_checkstring(state, 1);
+    lua_Integer seed = luaL_checkinteger(state, 2);
+    luaL_argcheck(state, seed >= 0, 2, "Seed must be nonnegative");
+    char *code = workspace_read(path, RUNTIME_ASSET_FILE_BYTES);
+    if (!code)
+        return luaL_error(state, "%s", workspace_error());
+    bool ok = runtime_start_test(code, (unsigned)seed);
+    free(code);
+    if (!ok)
+        return luaL_error(state, "%s", runtime_error());
+    lua_pushliteral(state, "Test started; automatic frames paused");
+    return 1;
+}
+
+static int step_frames(lua_State *state) {
+    operation(state);
+    lua_Integer frames = luaL_checkinteger(state, 1);
+    lua_Integer held = luaL_checkinteger(state, 2);
+    int x = (int)luaL_optinteger(state, 3, 0),
+        y = (int)luaL_optinteger(state, 4, 0);
+    if (frames < 1 ||
+        (unsigned)frames >
+            RUNTIME_TEST_MAX_FRAMES - context(state)->test_frames ||
+        held < 0 || ((unsigned)held & ~BUTTON_ALL))
+        return luaL_error(state, "Test budget is 120 frames per tool "
+                                 "execution; buttons must be a valid mask");
+    context(state)->test_frames += (unsigned)frames;
+    if (!runtime_step((unsigned)frames, (unsigned)held, x, y))
+        return luaL_error(state,
+                          "Test step failed (start_test first, touch "
+                          "coordinates must be on screen): %s",
+                          runtime_error());
+    return inspect_runtime(state);
+}
+
+static int finish_test(lua_State *state) {
+    operation(state);
+    runtime_finish_test();
+    lua_pushliteral(state, "Live input resumed");
+    return 1;
+}
+
+static int create_checkpoint(lua_State *state) {
+    operation(state);
+    if (!workspace_checkpoint(luaL_checkstring(state, 1), false))
+        return luaL_error(state, "%s", workspace_error());
+    lua_pushliteral(state, "Checkpoint saved");
+    return 1;
+}
+
+static int restore_checkpoint(lua_State *state) {
+    operation(state);
+    runtime_stop();
+    if (!workspace_checkpoint(luaL_checkstring(state, 1), true))
+        return luaL_error(state, "%s", workspace_error());
+    lua_pushliteral(
+        state, "Checkpoint restored; read versions and run the program again");
     return 1;
 }
 
 static int capture_screen(lua_State *state) {
     operation(state);
-    char path[160];
-    if (!workspace_path("capture.ppm", path, sizeof(path)) ||
-        !runtime_capture(path))
+    if (!image_support)
+        return luaL_error(state,
+                          "Selected model does not support image input; use "
+                          "inspect_runtime or select an image-capable model");
+    if (!image_capture(captured_image, sizeof(captured_image))) {
+        captured_image[0] = 0;
         return luaL_error(state, "Screen capture failed");
-    lua_pushliteral(state, "capture.ppm (256x192 RGB, PPM)");
+    }
+    lua_pushstring(state, captured_image);
     return 1;
 }
 
@@ -367,10 +455,49 @@ static const NativeTool native_tools[] = {
      {{"path", ARG_TEXT}},
      {"message"}},
     {"inspect_runtime",
-     "Get running state, memory and the last runtime error.",
+     "Get structured runtime metrics, errors, and the creation's inspect() "
+     "state.",
      inspect_runtime,
      {{0}},
      {"diagnostics"}},
+    {"start_test",
+     "Start a creation with a repeatable random seed. Automatic frames stay "
+     "paused until finish_test.",
+     start_test,
+     {{"path", ARG_TEXT}, {"seed", ARG_INTEGER}},
+     {"message"}},
+    {"step_frames",
+     "Advance 1..120 fixed-time test frames. buttons is a held mask; pressed "
+     "edges are derived. TOUCH enables touch_x,touch_y.",
+     step_frames,
+     {{"frames", ARG_INTEGER},
+      {"buttons", ARG_INTEGER},
+      {"touch_x", ARG_INTEGER},
+      {"touch_y", ARG_INTEGER}},
+     {"diagnostics"}},
+    {"finish_test",
+     "Resume normal frame updates and live input.",
+     finish_test,
+     {{0}},
+     {"message"}},
+    {"capture_screen",
+     "Capture the current creation as PNG and attach it as image input to the "
+     "next model request. Requires image_input support in the model catalog.",
+     capture_screen,
+     {{0}},
+     {"image"}},
+    {"create_checkpoint",
+     "Save project source and assets under a name (1..24 letters, digits, "
+     "dashes or underscores). Sessions and save data are excluded.",
+     create_checkpoint,
+     {{"name", ARG_TEXT}},
+     {"message"}},
+    {"restore_checkpoint",
+     "Stop the program and restore a checkpoint. Files added since the "
+     "checkpoint are removed. Read versions and run again afterward.",
+     restore_checkpoint,
+     {{"name", ARG_TEXT}},
+     {"message"}},
     {"read_logs",
      "Read logs from cursor=0 or the previous next_cursor. Returns logs and "
      "next_cursor.",
@@ -509,10 +636,19 @@ bool tools_call(const char *name, const cJSON *arguments, char *output,
             else if (lua_isinteger(state, i))
                 cJSON_AddNumberToObject(result, key,
                                         (double)lua_tointeger(state, i));
-            else
+            else if (lua_istable(state, i)) {
+                ValueBudget value_budget = {.tool_result = true};
+                cJSON *value = lua_value_json(state, i, 0, &value_budget);
+                if (value)
+                    cJSON_AddItemToObject(result, key, value);
+                else {
+                    ok = false;
+                    break;
+                }
+            } else
                 cJSON_AddNullToObject(result, key);
         }
-        char *encoded = cJSON_PrintUnformatted(result);
+        char *encoded = ok ? cJSON_PrintUnformatted(result) : NULL;
         ok = encoded && strlen(encoded) < capacity;
         snprintf(
             output, capacity, "%s",
@@ -525,6 +661,7 @@ bool tools_call(const char *name, const cJSON *arguments, char *output,
                  lua_type(state, -1) == LUA_TSTRING ? lua_tostring(state, -1)
                                                     : "Non-text tool error");
     lua_close(state);
+    cJSON_Delete(budget.temporary_json);
     free(budget.temporary);
     return ok;
 }
@@ -550,13 +687,34 @@ static int initialize(lua_State *state) {
         lua_pushnil(state);
         lua_setglobal(state, removed[i]);
     }
-    const luaL_Reg functions[] = {
-        {"read_file", read_file},       {"write_file", write_file},
-        {"patch_file", patch_file},     {"capture_screen", capture_screen},
-        {"list_files", list_files},     {"run_program", run_program},
-        {"stop_program", stop_program}, {"inspect_runtime", inspect_runtime},
-        {"read_logs", read_logs},       {NULL, NULL}};
+    const luaL_Reg functions[] = {{"read_file", read_file},
+                                  {"write_file", write_file},
+                                  {"patch_file", patch_file},
+                                  {"capture_screen", capture_screen},
+                                  {"list_files", list_files},
+                                  {"run_program", run_program},
+                                  {"stop_program", stop_program},
+                                  {"inspect_runtime", inspect_runtime},
+                                  {"start_test", start_test},
+                                  {"step_frames", step_frames},
+                                  {"finish_test", finish_test},
+                                  {"create_checkpoint", create_checkpoint},
+                                  {"restore_checkpoint", restore_checkpoint},
+                                  {"read_logs", read_logs},
+                                  {NULL, NULL}};
     luaL_newlib(state, functions);
+    const struct {
+        const char *name;
+        unsigned value;
+    } buttons[] = {
+        {"A", BUTTON_A},   {"B", BUTTON_B},        {"X", BUTTON_X},
+        {"Y", BUTTON_Y},   {"LEFT", BUTTON_LEFT},  {"RIGHT", BUTTON_RIGHT},
+        {"UP", BUTTON_UP}, {"DOWN", BUTTON_DOWN},  {"L", BUTTON_L},
+        {"R", BUTTON_R},   {"TOUCH", BUTTON_TOUCH}};
+    for (unsigned i = 0; i < sizeof(buttons) / sizeof(*buttons); i++) {
+        lua_pushinteger(state, buttons[i].value);
+        lua_setfield(state, -2, buttons[i].name);
+    }
     lua_setglobal(state, "tools");
     return 0;
 }
@@ -568,13 +726,27 @@ bool tools_execute(const char *code, char *output, unsigned capacity) {
         snprintf(output, capacity, "Code Mode memory unavailable");
         return false;
     }
-    lua_sethook(state, hook, LUA_MASKCOUNT, 1000);
+    lua_sethook(state, hook, LUA_MASKCOUNT, TOOL_HOOK_INTERVAL);
     lua_pushcfunction(state, initialize);
     int status = lua_pcall(state, 0, 0, 0);
     if (status == LUA_OK)
         status = luaL_loadbufferx(state, code, strlen(code), "code-mode", "t");
     if (status == LUA_OK)
         status = lua_pcall(state, 0, 1, 0);
+    if (status == LUA_OK && lua_istable(state, -1)) {
+        ValueBudget value_budget = {.tool_result = true};
+        cJSON *value = lua_value_json(state, -1, 0, &value_budget);
+        budget.temporary = value ? cJSON_PrintUnformatted(value) : NULL;
+        cJSON_Delete(value);
+        if (budget.temporary) {
+            snprintf(output, capacity, "%s", budget.temporary);
+            bool ok = strlen(budget.temporary) < capacity;
+            lua_close(state);
+            cJSON_Delete(budget.temporary_json);
+            free(budget.temporary);
+            return ok;
+        }
+    }
     const char *result =
         lua_type(state, -1) == LUA_TSTRING ? lua_tostring(state, -1) : NULL;
     snprintf(output, capacity, "%s",
@@ -590,6 +762,7 @@ bool tools_execute(const char *code, char *output, unsigned capacity) {
         status = LUA_ERRRUN;
     }
     lua_close(state);
+    cJSON_Delete(budget.temporary_json);
     free(budget.temporary);
     return status == LUA_OK;
 }

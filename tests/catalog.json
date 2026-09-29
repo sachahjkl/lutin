@@ -15,6 +15,7 @@
       "name": "GPT 6 Luna",
       "provider": "opencode-go",
       "model": "gpt-6-luna",
+      "image_input": true,
       "protocol": "responses"
     },
     {

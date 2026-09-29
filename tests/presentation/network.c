@@ -29,13 +29,14 @@ bool network_start(const char *body, NetworkEvent event) {
         FILE *file = fopen("/lutin/replay.json", "rb");
         if (!file)
             return false;
-        char *data = malloc(65537);
+        enum { REPLAY_BYTES = 192 * 1024 };
+        char *data = malloc(REPLAY_BYTES + 1);
         if (!data) {
             fclose(file);
             return false;
         }
-        size_t length = fread(data, 1, 65536, file);
-        bool invalid = ferror(file) || length == 65536;
+        size_t length = fread(data, 1, REPLAY_BYTES, file);
+        bool invalid = ferror(file) || length == REPLAY_BYTES;
         fclose(file);
         data[length] = 0;
         responses = invalid ? NULL : cJSON_Parse(data);

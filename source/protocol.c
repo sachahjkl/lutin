@@ -91,9 +91,26 @@ char *protocol_request(const char *body, ApiProtocol api) {
             if (cJSON_IsString(content))
                 output = message(messages, role, content->valuestring);
             else {
+                output = cJSON_CreateObject();
+                cJSON_AddStringToObject(output, "role", role);
+                cJSON *parts = cJSON_AddArrayToObject(output, "content");
                 cJSON *part;
-                cJSON_ArrayForEach(part, content) if (*text(part, "text"))
-                    output = message(messages, role, text(part, "text"));
+                cJSON_ArrayForEach(part, content) {
+                    cJSON *converted = cJSON_CreateObject();
+                    if (!strcmp(text(part, "type"), "input_image")) {
+                        cJSON_AddStringToObject(converted, "type", "image_url");
+                        cJSON *image =
+                            cJSON_AddObjectToObject(converted, "image_url");
+                        cJSON_AddStringToObject(image, "url",
+                                                text(part, "image_url"));
+                    } else {
+                        cJSON_AddStringToObject(converted, "type", "text");
+                        cJSON_AddStringToObject(converted, "text",
+                                                text(part, "text"));
+                    }
+                    cJSON_AddItemToArray(parts, converted);
+                }
+                cJSON_AddItemToArray(messages, output);
             }
             assistant = !strcmp(role, "assistant") ? output : NULL;
             if (assistant)

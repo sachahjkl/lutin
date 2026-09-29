@@ -20,6 +20,16 @@ Lutin writes and runs Lua programs on the console, reads runtime errors, and edi
 **[Watch the presentation · MP4](docs/media/presentation.mp4)**
 Recorded DeepSeek responses replayed in melonDS, with file and runtime tools executing in the ROM.
 
+### Creation tests
+
+[2D recording](https://github.com/sachahjkl/lutin/releases/download/v0.6.0/lutin-v0.6.0-2d-replay.mp4) · [Software 3D recording](https://github.com/sachahjkl/lutin/releases/download/v0.6.0/lutin-v0.6.0-3d-replay.mp4)
+
+GPT 6 Luna generated both creations in live host sessions.
+These emulator recordings replay their final validation calls, then exercise real emulated input.
+See [verification evidence](docs/verification.md#creation-tool-sessions-2026-09-29).
+
+<img src="docs/media/creation-2d.png" alt="Lantern Run running after its recorded agent tests" width="256"> <img src="docs/media/creation-3d.png" alt="Signal Garden software 3D scene running after its recorded agent tests" width="256">
+
 [Install](#installation) · [Configure](#configuration) · [Controls](#controls) · [Architecture](#architecture) · [Contribute](CONTRIBUTING.md)
 
 ## Why a DSi?
@@ -33,11 +43,15 @@ Saved programs also work offline. Lutin supports games, animations, drawing tool
 ## What it does
 
 - **Autonomous tools:** read files, make version-checked edits, run programs, and inspect diagnostics.
+- **Creation tests:** advance seeded frames with injected input and assert creation-defined state.
+- **Visual feedback:** send PNG captures to image-capable models.
+- **Checkpoints:** restore project source and assets after failed edits.
 - **Two-screen workflow:** conversation above; keyboard, preview, or game controls below.
 - **Persistent sessions:** create, switch, reset, and delete sessions stored on SD.
 - **Steer and Queue:** redirect the current task or save requests for later.
 - **Local execution:** draw shapes and text, read buttons and touch input, and inspect Lua errors.
 - **Generated assets:** editable pixel sprites, animation frames, synthesized music, and sound effects. See [asset APIs](docs/assets.md).
+- **Reusable APIs:** tilemaps, camera movement, animation, modules, save data, and bounded software 3D. See [creation tools](docs/creation-tools.md).
 - **Input capture:** sample buttons at VBlank and retain short presses across a busy main-loop iteration.
 - **Visible progress:** Wi-Fi state, transport stage, elapsed time, and received bytes.
 - **Reproducible builds:** a pinned Nix environment, sanitizer tests, and emulator checks.

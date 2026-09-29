@@ -2,6 +2,7 @@
 #define AI_RUNTIME_H
 
 #include "input.h"
+#include <cJSON.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -23,6 +24,16 @@ enum {
     RUNTIME_AUDIO_VOICES = 4,
     RUNTIME_NOISE_VOICE = RUNTIME_AUDIO_VOICES - 1
 };
+enum {
+    RUNTIME_MEMORY_BYTES = 2 * 1024 * 1024,
+    RUNTIME_INSTRUCTIONS = 100000,
+    RUNTIME_HOOK_INTERVAL = 1000,
+    RUNTIME_PIXEL_BUDGET = 262144,
+    RUNTIME_TEST_MAX_FRAMES = 120,
+    RUNTIME_SAVE_BYTES = 8192,
+    RUNTIME_STORAGE_OPERATIONS = 4,
+    RUNTIME_STORAGE_BYTES = 2 * RUNTIME_SAVE_BYTES
+};
 
 typedef struct {
     uint16_t *pixels;
@@ -34,15 +45,23 @@ typedef struct {
 } RuntimeInput;
 
 bool runtime_start(const char *code);
+bool runtime_start_test(const char *code, unsigned seed);
+bool runtime_step(unsigned frames, unsigned buttons, int x, int y);
+void runtime_finish_test(void);
+cJSON *runtime_inspect(void);
 void runtime_stop(void);
 void runtime_frame(RuntimeInput input);
 bool runtime_running(void);
+bool runtime_testing(void);
 const char *runtime_error(void);
 size_t runtime_memory(void);
 void runtime_set_font(const unsigned char *font);
 bool runtime_capture(const char *path);
+const uint16_t *runtime_pixels(void);
 unsigned runtime_logs(unsigned cursor, char *output, size_t capacity);
 typedef char *(*RuntimeAssetReader)(const char *path, size_t limit);
+typedef bool (*RuntimeSaveWriter)(const char *path, const char *data);
+void runtime_set_save_writer(RuntimeSaveWriter writer);
 typedef void (*RuntimeAudio)(unsigned voice, unsigned frequency,
                              unsigned volume);
 void runtime_set_asset_reader(RuntimeAssetReader reader);

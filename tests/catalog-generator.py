@@ -9,7 +9,7 @@ source = {
             "text": {
                 "name": "Text",
                 "tool_call": True,
-                "modalities": {"output": ["text"]},
+                "modalities": {"input": ["text", "image"], "output": ["text"]},
             },
             "image": {
                 "name": "Image",
@@ -30,6 +30,7 @@ assert len(catalog["models"]) == 1
 assert catalog["models"][0]["id"] == "example/text"
 assert catalog["models"][0]["name"] == "Example / Text"
 assert catalog["models"][0]["protocol"] == "responses"
+assert catalog["models"][0]["image_input"] is True
 routes["models"][0]["model"] = "image"
 try:
     build(source, routes)

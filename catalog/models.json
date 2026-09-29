@@ -15,33 +15,33 @@
       "name": "OpenCode Go / GPT-6 Luna",
       "provider": "opencode-go",
       "model": "gpt-6-luna",
-      "image_input": true,
-      "protocol": "responses"
+      "protocol": "responses",
+      "image_input": true
     },
     {
       "id": "opencode-go/gpt-5.6-luna",
       "name": "OpenCode Go / GPT-5.6 Luna",
       "provider": "opencode-go",
       "model": "gpt-5.6-luna",
-      "image_input": true,
-      "protocol": "responses"
+      "protocol": "responses",
+      "image_input": true
     },
     {
       "id": "opencode-go/grok-4.6",
       "name": "OpenCode Go / Grok 4.6",
       "provider": "opencode-go",
       "model": "grok-4.6",
-      "image_input": true,
-      "protocol": "responses"
+      "protocol": "responses",
+      "image_input": true
     },
     {
       "id": "opencode-go/deepseek-v4-flash",
       "name": "OpenCode Go / DeepSeek V4 Flash",
       "provider": "opencode-go",
       "model": "deepseek-v4-flash",
-      "image_input": false,
       "protocol": "chat-completions",
-      "reasoning_effort": "low"
+      "reasoning_effort": "low",
+      "image_input": false
     }
   ]
 }

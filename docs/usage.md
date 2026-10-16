@@ -28,7 +28,7 @@ Lutin reads `/lutin/config.json` at startup:
 
 All keys are optional. These are the defaults.
 `default_model` uses a `provider/model` identifier.
-The bundled IDs are `opencode-go/gpt-6-luna`, `opencode-go/gpt-5.6-luna`, `opencode-go/grok-4.6`, and `opencode-go/deepseek-v4-flash`.
+The bundled IDs are `opencode-go/gpt-6-luna`, `opencode-go/gpt-5.6-luna`, `opencode-go/grok-4.7`, and `opencode-go/deepseek-v4.1-flash`.
 A session's saved model takes priority.
 `startup_view` accepts `keyboard` or `sessions`.
 `tool_details` expands tool arguments and results in the chat.
@@ -272,7 +272,7 @@ Physical power-loss recovery on FAT remains a hardware validation task.
 
 ```sh
 nix build .#live-agent -o result-live-agent
-result-live-agent/bin/live-agent /path/to/private-test-directory opencode-go/deepseek-v4-flash 'Create and run an animation.'
+result-live-agent/bin/live-agent /path/to/private-test-directory opencode-go/deepseek-v4.1-flash 'Create and run an animation.'
 ```
 
 Place `keys/opencode-go`, `ca.pem`, and `models.json` in that directory first.

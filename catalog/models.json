@@ -27,21 +27,21 @@
       "image_input": true
     },
     {
-      "id": "opencode-go/grok-4.6",
-      "name": "OpenCode Go / Grok 4.6",
+      "id": "opencode-go/grok-4.7",
+      "name": "OpenCode Go / Grok 4.7",
       "provider": "opencode-go",
-      "model": "grok-4.6",
+      "model": "grok-4.7",
       "protocol": "responses",
       "image_input": true
     },
     {
-      "id": "opencode-go/deepseek-v4-flash",
-      "name": "OpenCode Go / DeepSeek V4 Flash",
+      "id": "opencode-go/deepseek-v4.1-flash",
+      "name": "OpenCode Go / DeepSeek V4.1 Flash",
       "provider": "opencode-go",
-      "model": "deepseek-v4-flash",
+      "model": "deepseek-v4.1-flash",
       "protocol": "chat-completions",
       "reasoning_effort": "low",
-      "image_input": false
+      "image_input": true
     }
   ]
 }

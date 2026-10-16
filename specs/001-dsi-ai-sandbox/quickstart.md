@@ -24,7 +24,7 @@ Automated checks do not use API credentials.
 
 ```sh
 nix build .#live-agent -o result-live-agent
-result-live-agent/bin/live-agent /path/to/private-test-directory opencode-go/deepseek-v4-flash 'Create and run an animation.'
+result-live-agent/bin/live-agent /path/to/private-test-directory opencode-go/deepseek-v4.1-flash 'Create and run an animation.'
 ```
 
 Place `keys/opencode-go`, `ca.pem`, and `models.json` in the private test directory first.

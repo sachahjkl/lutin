@@ -27,8 +27,8 @@ Sources:
 ## AI transport
 
 OpenCode Go supplies direct HTTPS inference.
-GPT 6 Luna, GPT 5.6 Luna, and Grok 4.6 use Responses.
-DeepSeek V4 Flash uses Chat Completions with low reasoning effort.
+GPT 6 Luna, GPT 5.6 Luna, and Grok 4.7 use Responses.
+DeepSeek V4.1 Flash uses Chat Completions with low reasoning effort.
 The adapter preserves reasoning content required by subsequent DeepSeek tool turns.
 The service contract is in `contracts/service.md`.
 

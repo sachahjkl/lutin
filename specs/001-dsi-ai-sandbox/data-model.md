@@ -24,7 +24,7 @@ It contains:
 - `history`: ordered conversation items and tool results.
 - `queue`: pending request strings.
 - `journal`: tool-call records indexed by call ID.
-- `model`: the provider-qualified ID, such as `opencode-go/deepseek-v4-flash`.
+- `model`: the provider-qualified ID, such as `opencode-go/deepseek-v4.1-flash`.
 - `network_id`: the persistent OpenCode session identifier.
 - `interruptions`: incomplete responses when present.
 

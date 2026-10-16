@@ -66,7 +66,7 @@ Dynamic projects and generated assets are available from `v0.4.0`.
 | Launcher   | Console SD card, Unlaunch, and TWiLight Menu++.                                             |
 | Network    | DSi Wi-Fi through DSWiFi, including DSi-mode WPA2 support.                                  |
 | AI service | OpenCode Go, with your own account and API key.                                             |
-| Models     | GPT 6 Luna, GPT 5.6 Luna, Grok 4.6, DeepSeek V4 Flash. Availability depends on the service. |
+| Models     | GPT 6 Luna, GPT 5.6 Luna, Grok 4.7, DeepSeek V4.1 Flash. Availability depends on the service. |
 | Build host | Linux x86-64 with Nix flakes enabled.                                                       |
 | Emulator   | melonDS DS-mode UI and runtime checks. Full DSi emulation requires your own console dumps.  |
 | Language   | English interface and documentation.                                                        |
@@ -138,7 +138,7 @@ Edit `/lutin/config.json`, then restart Lutin:
 
 ```json
 {
-  "default_model": "opencode-go/deepseek-v4-flash",
+  "default_model": "opencode-go/deepseek-v4.1-flash",
   "tool_details": false,
   "startup_view": "sessions"
 }
@@ -146,7 +146,7 @@ Edit `/lutin/config.json`, then restart Lutin:
 
 | Key             | Values                                                               | Default                  |
 | --------------- | -------------------------------------------------------------------- | ------------------------ |
-| `default_model` | Provider-qualified model ID, such as `opencode-go/deepseek-v4-flash` | `opencode-go/gpt-6-luna` |
+| `default_model` | Provider-qualified model ID, such as `opencode-go/deepseek-v4.1-flash` | `opencode-go/gpt-6-luna` |
 | `tool_details`  | `true` or `false`                                                    | `false`                  |
 | `startup_view`  | `keyboard` or `sessions`                                             | `keyboard`               |
 

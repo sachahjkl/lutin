@@ -60,16 +60,16 @@ Saved programs also work offline. Lutin supports games, animations, drawing tool
 
 Dynamic projects and generated assets are available from `v0.4.0`.
 
-| Component  | Current support                                                                             |
-| ---------- | ------------------------------------------------------------------------------------------- |
-| Console    | Nintendo DSi / DSi XL in DSi mode. User-tested on DSi XL.                                   |
-| Launcher   | Console SD card, Unlaunch, and TWiLight Menu++.                                             |
-| Network    | DSi Wi-Fi through DSWiFi, including DSi-mode WPA2 support.                                  |
-| AI service | OpenCode Go, with your own account and API key.                                             |
+| Component  | Current support                                                                               |
+| ---------- | --------------------------------------------------------------------------------------------- |
+| Console    | Nintendo DSi / DSi XL in DSi mode. User-tested on DSi XL.                                     |
+| Launcher   | Console SD card, Unlaunch, and TWiLight Menu++.                                               |
+| Network    | DSi Wi-Fi through DSWiFi, including DSi-mode WPA2 support.                                    |
+| AI service | OpenCode Go, with your own account and API key.                                               |
 | Models     | GPT 6 Luna, GPT 5.6 Luna, Grok 4.7, DeepSeek V4.1 Flash. Availability depends on the service. |
-| Build host | Linux x86-64 with Nix flakes enabled.                                                       |
-| Emulator   | melonDS DS-mode UI and runtime checks. Full DSi emulation requires your own console dumps.  |
-| Language   | English interface and documentation.                                                        |
+| Build host | Linux x86-64 with Nix flakes enabled.                                                         |
+| Emulator   | melonDS DS-mode UI and runtime checks. Full DSi emulation requires your own console dumps.    |
+| Language   | English interface and documentation.                                                          |
 
 ## Installation
 
@@ -144,11 +144,11 @@ Edit `/lutin/config.json`, then restart Lutin:
 }
 ```
 
-| Key             | Values                                                               | Default                  |
-| --------------- | -------------------------------------------------------------------- | ------------------------ |
+| Key             | Values                                                                 | Default                  |
+| --------------- | ---------------------------------------------------------------------- | ------------------------ |
 | `default_model` | Provider-qualified model ID, such as `opencode-go/deepseek-v4.1-flash` | `opencode-go/gpt-6-luna` |
-| `tool_details`  | `true` or `false`                                                    | `false`                  |
-| `startup_view`  | `keyboard` or `sessions`                                             | `keyboard`               |
+| `tool_details`  | `true` or `false`                                                      | `false`                  |
+| `startup_view`  | `keyboard` or `sessions`                                               | `keyboard`               |
 
 All keys are optional. A session's saved model takes priority over the default.
 Unknown, repeated, or invalid keys reject the whole configuration and display a diagnostic.
